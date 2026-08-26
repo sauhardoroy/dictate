@@ -1,0 +1,61 @@
+{
+  "manifest_version": 3,
+  "name": "Dictate — AI Voice Typing & Liquid Glass Pill",
+  "version": "2.0.0",
+  "description": "Shape-shifting Apple Liquid Glass voice typing pill with offline speech recognition and NVIDIA AI polish.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://integrate.api.nvidia.com/*"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Dictate Settings & History",
+    "default_icon": {
+      "16": "assets/icon16.png",
+      "32": "assets/icon32.png",
+      "48": "assets/icon48.png",
+      "128": "assets/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": [
+        "services/voice_commands.js",
+        "services/semantic_vad.js",
+        "content/liquid_glass_shader.js",
+        "content/pill_overlay.js",
+        "content/content.js"
+      ],
+      "run_at": "document_end"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["content/pill.css", "assets/*"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "commands": {
+    "toggle-dictation": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+P",
+        "mac": "Command+Shift+P"
+      },
+      "description": "Toggle Dictate voice recording"
+    }
+  },
+  "icons": {
+    "16": "assets/icon16.png",
+    "32": "assets/icon32.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  }
+}

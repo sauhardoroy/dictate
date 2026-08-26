@@ -1,0 +1,28 @@
+# Python runtime & virtual environments
+.venv/
+env/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# User configs & local secrets
+settings.json
+history.json
+*.log
+
+# PyInstaller build artifacts & executables
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+
+# Large model weight binaries (auto-downloaded by Faster-Whisper)
+models/
+*.bin
+*.onnx
+
+# Temporary QA renders
+qa_*.png
+_qa_*.png
