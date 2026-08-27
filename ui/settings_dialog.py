@@ -1,4 +1,6 @@
 """Modern Apple & Material-style Frosted Glass Settings Dialog (Zero Emoji, Clean Typography)."""
+import os
+import sys
 import sounddevice as sd
 from PyQt6.QtCore import (
     QEasingCurve,
@@ -615,36 +617,68 @@ class SettingsDialog(QDialog):
         card1.layout_box.addLayout(form1)
         layout.addWidget(card1)
 
-        # Card 2: Smart Auto-Stop & Commands
-        card2 = FrostedCard("Smart Auto-Stop & Punctuation")
+        # Card 2: Smart Auto-Stop & Punctuation
+        card2 = FrostedCard("Listening & Stopping Control")
         v2 = QVBoxLayout()
         v2.setSpacing(12)
 
-        self.voice_commands_cb = QCheckBox("Enable Voice Commands (e.g. 'new line', 'comma', 'period')")
-        self.voice_commands_cb.setChecked(bool(data.get("voice_commands", True)))
-        v2.addWidget(self.voice_commands_cb)
+        form2 = QFormLayout()
+        form2.setSpacing(12)
+        form2.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+
+        self.stop_mode = QComboBox()
+        self.stop_mode.addItem("Automatically stop on silence (Auto-Stop)", True)
+        self.stop_mode.addItem("Manual stop (Click floating pill, tray icon, or shortcut)", False)
+        is_auto_stop = bool(data.get("auto_stop", True))
+        self.stop_mode.setCurrentIndex(0 if is_auto_stop else 1)
+        form2.addRow("Stop Listening Mode", self.stop_mode)
+        v2.addLayout(form2)
 
         self.auto_stop_cb = QCheckBox("Adaptive Semantic Auto-Stop on silence")
-        self.auto_stop_cb.setChecked(bool(data.get("auto_stop", True)))
-        v2.addWidget(self.auto_stop_cb)
+        self.auto_stop_cb.setChecked(is_auto_stop)
+        self.auto_stop_cb.setVisible(False)
 
         self.preview_cb = QCheckBox("Show live transcript preview while recording")
         self.preview_cb.setChecked(bool(data.get("show_interim_preview", True)))
         v2.addWidget(self.preview_cb)
 
+        self.voice_commands_cb = QCheckBox("Enable Voice Commands (e.g. 'new line', 'comma', 'period')")
+        self.voice_commands_cb.setChecked(bool(data.get("voice_commands", True)))
+        v2.addWidget(self.voice_commands_cb)
+
+        self.silence_container = QWidget()
+        silence_layout = QVBoxLayout(self.silence_container)
+        silence_layout.setContentsMargins(0, 0, 0, 0)
+        silence_layout.setSpacing(6)
+
         row = QHBoxLayout()
-        row.addWidget(QLabel("Base silence threshold (seconds):"))
+        row.addWidget(QLabel("Silence threshold before auto-stopping (seconds):"))
         self.vad_silence = QDoubleSpinBox()
-        self.vad_silence.setRange(0.3, 4.0)
+        self.vad_silence.setRange(0.3, 5.0)
         self.vad_silence.setSingleStep(0.1)
         self.vad_silence.setValue(float(data.get("vad_silence_seconds", 1.4)))
         row.addWidget(self.vad_silence)
         row.addStretch()
-        v2.addLayout(row)
+        silence_layout.addLayout(row)
 
-        helper = QLabel("Dictate automatically grants extra thinking time when you pause mid-sentence.")
-        helper.setStyleSheet("color: #94A3B8; font-size: 11px; margin-top: 2px;")
-        v2.addWidget(helper)
+        self.silence_helper = QLabel("Dictate automatically grants extra thinking time when you pause mid-sentence.")
+        self.silence_helper.setStyleSheet("color: #94A3B8; font-size: 11px; margin-top: 2px;")
+        silence_layout.addWidget(self.silence_helper)
+        v2.addWidget(self.silence_container)
+
+        self.manual_helper = QLabel("💡 Manual Mode active: Dictate will record continuously without cutting you off. Click the floating pill, tray icon, or press your hotkey when done.")
+        self.manual_helper.setStyleSheet("color: #38BDF8; font-size: 11px; margin-top: 2px;")
+        self.manual_helper.setWordWrap(True)
+        v2.addWidget(self.manual_helper)
+
+        def _on_stop_mode_changed():
+            auto = bool(self.stop_mode.currentData())
+            self.auto_stop_cb.setChecked(auto)
+            self.silence_container.setVisible(auto)
+            self.manual_helper.setVisible(not auto)
+
+        self.stop_mode.currentIndexChanged.connect(_on_stop_mode_changed)
+        _on_stop_mode_changed()
 
         card2.layout_box.addLayout(v2)
         layout.addWidget(card2)
@@ -658,63 +692,40 @@ class SettingsDialog(QDialog):
         layout.setContentsMargins(0, 4, 0, 4)
         layout.setSpacing(14)
 
-        card = FrostedCard("Offline Speech Recognition")
+        # Card 1: Model & Hardware
+        card = FrostedCard("Sherpa-ONNX Speech Models (NVIDIA & Alibaba)")
         form = QFormLayout()
         form.setSpacing(12)
 
         self.model = QComboBox()
-        models = [
-            ("NVIDIA Parakeet TDT 0.6B v3 (SOTA Transducer, ~620MB)", "parakeet-tdt-0.6b-v3"),
-            ("large-v3-turbo (State of the Art & Fast, ~1.6GB)", "deepdml/faster-whisper-large-v3-turbo"),
-            ("distil-large-v3 (Distil-Whisper Ultra Fast, ~1.5GB)", "Systran/faster-distil-whisper-large-v3"),
-            ("medium.en (High Accuracy English, ~1.5GB)", "medium.en"),
-            ("small.en (Fast & Balanced, ~460MB)", "small.en"),
-            ("Alibaba SenseVoice Small (Multilingual 50x Fast, ~230MB)", "sense-voice-small"),
-            ("Useful Sensors Moonshine Base (INT8, ~115MB)", "moonshine-base"),
-            ("Useful Sensors Moonshine Tiny (INT8, ~45MB)", "moonshine-tiny"),
-            ("large-v3 (Maximum Accuracy Multilingual, ~3GB)", "large-v3"),
-            ("base.en (Lightweight, ~140MB)", "base.en"),
-            ("tiny.en (Ultra Lightweight, ~75MB)", "tiny.en"),
-        ]
+        from asr.model_manager import is_model_cached
+        
+        parakeet_status = "✓ Ready" if is_model_cached("parakeet-tdt-0.6b-v3") else "↓ Auto-download"
+        sensevoice_status = "✓ Ready" if is_model_cached("sense-voice-small") else "↓ Auto-download"
+        fastconformer_status = "✓ Ready" if is_model_cached("nemo-fast-conformer-80ms") else "↓ Auto-download"
 
-        # Dynamically scan models/ folder for any user-downloaded custom models
-        try:
-            models_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models")
-            if os.path.exists(models_dir):
-                known_vals = {v for _, v in models}
-                for item in os.listdir(models_dir):
-                    item_path = os.path.join(models_dir, item)
-                    if os.path.isdir(item_path) and item not in known_vals:
-                        models.append((f"[Local Folder] {item}", item))
-        except Exception:
-            pass
+        models = [
+            (f"🚀 NVIDIA Parakeet TDT 0.6B v3 (English FastConformer, ~250MB) [{parakeet_status}]", "parakeet-tdt-0.6b-v3"),
+            (f"🌐 Alibaba SenseVoice Small (Multilingual 50x Fast + ITN, ~110MB) [{sensevoice_status}]", "sense-voice-small"),
+        ]
 
         for label, val in models:
             self.model.addItem(label, val)
-        curr = data.get("model", "small.en")
+        curr = data.get("model", "parakeet-tdt-0.6b-v3")
         idx = self.model.findData(curr)
         if idx >= 0:
             self.model.setCurrentIndex(idx)
         else:
-            self.model.setCurrentText(curr)
-        form.addRow("Transcription Model (Final)", self.model)
+            self.model.setCurrentIndex(0)
+        form.addRow("Speech Model (Final)", self.model)
 
         self.streaming_model = QComboBox()
         streaming_models = [
-            ("Zipformer-70M (High Accuracy English, ~75MB)", "zipformer-70M"),
-            ("NVIDIA FastConformer CTC (80ms Streaming, ~420MB)", "nemo-fast-conformer-80ms"),
-            ("Alibaba SenseVoice Small (Multilingual 50x Fast, ~230MB)", "sense-voice-small"),
-            ("Useful Sensors Moonshine Base (INT8, ~115MB)", "moonshine-base"),
-            ("Useful Sensors Moonshine Tiny (INT8, ~45MB)", "moonshine-tiny"),
-            ("Zipformer-20M (Ultra Lightweight, ~25MB)", "zipformer-20M"),
-            ("Zipformer-Bilingual (English & Chinese, ~80MB)", "bilingual-zh-en"),
+            (f"🚀 NVIDIA FastConformer CTC 80ms (Real-Time Preview, ~420MB) [{fastconformer_status}]", "nemo-fast-conformer-80ms"),
         ]
         for label, val in streaming_models:
             self.streaming_model.addItem(label, val)
-        curr_stream = data.get("streaming_model", "zipformer-70M")
-        idx_stream = self.streaming_model.findData(curr_stream)
-        if idx_stream >= 0:
-            self.streaming_model.setCurrentIndex(idx_stream)
+        self.streaming_model.setCurrentIndex(0)
         form.addRow("Real-Time Preview Model", self.streaming_model)
 
         self.device = QComboBox()
@@ -726,12 +737,54 @@ class SettingsDialog(QDialog):
             self.device.setCurrentIndex(idx)
         form.addRow("Hardware Acceleration", self.device)
 
-        self.initial_prompt = QLineEdit(data.get("initial_prompt", ""))
-        self.initial_prompt.setPlaceholderText("Custom terms, names, product vocabulary...")
-        form.addRow("Prompt Vocabulary", self.initial_prompt)
-
         card.layout_box.addLayout(form)
         layout.addWidget(card)
+
+        # Card 2: Custom Jargon & Hotwords Phrase Boosting
+        card2 = FrostedCard("Custom Vocabulary & Phrase Boosting")
+        v2 = QVBoxLayout()
+        v2.setSpacing(10)
+
+        form2 = QFormLayout()
+        form2.setSpacing(12)
+
+        self.hotwords_file = QLineEdit(data.get("hotwords_file", "hotwords.txt"))
+        self.hotwords_file.setPlaceholderText("Path to hotwords.txt")
+        form2.addRow("Hotwords File", self.hotwords_file)
+
+        self.hotwords_score = QDoubleSpinBox()
+        self.hotwords_score.setRange(0.5, 10.0)
+        self.hotwords_score.setSingleStep(0.5)
+        self.hotwords_score.setValue(float(data.get("hotwords_score", 2.0)))
+        form2.addRow("Acoustic Boost Score", self.hotwords_score)
+
+        self.initial_prompt = QLineEdit(data.get("initial_prompt", ""))
+        self.initial_prompt.setPlaceholderText("Additional custom vocabulary...")
+        form2.addRow("Extra Keywords", self.initial_prompt)
+
+        v2.addLayout(form2)
+
+        # Check hotwords file status
+        hw_file = data.get("hotwords_file", "hotwords.txt")
+        hw_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), hw_file)
+        hw_count = 0
+        if os.path.exists(hw_path):
+            try:
+                with open(hw_path, "r", encoding="utf-8") as f:
+                    hw_count = sum(1 for line in f if line.strip() and not line.startswith("#"))
+            except Exception:
+                pass
+
+        if hw_count > 0:
+            lbl_status = QLabel(f"✓ Active: {hw_count:,} technical keywords & jargon loaded from {hw_file}")
+            lbl_status.setStyleSheet("color: #38BDF8; font-weight: 500; font-size: 12px; margin-top: 4px;")
+        else:
+            lbl_status = QLabel(f"ℹ No hotwords file found at {hw_file}. Create it to boost domain terms.")
+            lbl_status.setStyleSheet("color: #94A3B8; font-size: 11px; margin-top: 4px;")
+        v2.addWidget(lbl_status)
+
+        card2.layout_box.addLayout(v2)
+        layout.addWidget(card2)
 
         layout.addStretch()
         return page
@@ -862,6 +915,8 @@ class SettingsDialog(QDialog):
             "trigger_key": self.key_btn.key,
             "model": self.model.currentData() or self.model.currentText(),
             "device": self.device.currentData(),
+            "hotwords_file": self.hotwords_file.text().strip(),
+            "hotwords_score": round(self.hotwords_score.value(), 1),
             "initial_prompt": self.initial_prompt.text().strip(),
             "input_device": self.mic_device.currentData(),
             "restore_clipboard": self.restore_cb.isChecked(),

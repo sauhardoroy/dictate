@@ -9,18 +9,27 @@ applies safety measures:
 - Detects dangerous command patterns and logs a warning
 - Optionally blocks injection entirely for high-risk patterns
 """
-import ctypes
-from ctypes import wintypes
 import os
 import re
+import sys
 
 from log import get_logger
 
 log = get_logger(__name__)
 
-user32 = ctypes.windll.user32
-kernel32 = ctypes.windll.kernel32
-psapi = ctypes.windll.psapi
+user32 = None
+kernel32 = None
+psapi = None
+
+if sys.platform == "win32":
+    try:
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+        psapi = ctypes.windll.psapi
+    except Exception as exc:
+        log.warning("Win32 API bindings could not be initialized in sanitizer: %s", exc)
 
 # Terminal process names (lowercase). If the target window belongs to one of
 # these, we strip trailing newlines and check for dangerous patterns.
@@ -36,15 +45,26 @@ TERMINAL_PROCESSES = frozenset({
     "wsl.exe",
     "ubuntu.exe",
     "alacritty.exe",
+    "alacritty",
     "hyper.exe",
+    "hyper",
     "terminus.exe",
     "tabby.exe",
+    "tabby",
     "putty.exe",
     "kitty.exe",
+    "kitty",
     "mobaxterm.exe",
     "securecrt.exe",
     "xterm.exe",
+    "terminal",           # macOS Terminal
+    "iterm2",             # macOS iTerm2
+    "iterm",
+    "wezterm-gui",
+    "wezterm",
+    "warp",
 })
+
 
 # Patterns that are dangerous if pasted into a shell and executed.
 # These are checked case-insensitively against the full text.

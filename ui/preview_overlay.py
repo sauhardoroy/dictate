@@ -27,23 +27,33 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import QApplication, QWidget
 
 from ui import theme
+import sys
 from ui.pill import _is_windows_dark_mode
 
 GWL_EXSTYLE = -20
 WS_EX_NOACTIVATE = 0x08000000
 WDA_EXCLUDEFROMCAPTURE = 0x00000011
 
-user32 = ctypes.windll.user32
-GetWindowLong = getattr(user32, "GetWindowLongPtrW", user32.GetWindowLongW)
-SetWindowLong = getattr(user32, "SetWindowLongPtrW", user32.SetWindowLongW)
-GetWindowLong.argtypes = [wintypes.HWND, ctypes.c_int]
-GetWindowLong.restype = ctypes.c_ssize_t
-SetWindowLong.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t]
-SetWindowLong.restype = ctypes.c_ssize_t
+user32 = None
+GetWindowLong = None
+SetWindowLong = None
 
-if hasattr(user32, "SetWindowDisplayAffinity"):
-    user32.SetWindowDisplayAffinity.argtypes = [wintypes.HWND, wintypes.DWORD]
-    user32.SetWindowDisplayAffinity.restype = wintypes.BOOL
+if sys.platform == "win32":
+    try:
+        user32 = ctypes.windll.user32
+        GetWindowLong = getattr(user32, "GetWindowLongPtrW", user32.GetWindowLongW)
+        SetWindowLong = getattr(user32, "SetWindowLongPtrW", user32.SetWindowLongW)
+        GetWindowLong.argtypes = [wintypes.HWND, ctypes.c_int]
+        GetWindowLong.restype = ctypes.c_ssize_t
+        SetWindowLong.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t]
+        SetWindowLong.restype = ctypes.c_ssize_t
+
+        if hasattr(user32, "SetWindowDisplayAffinity"):
+            user32.SetWindowDisplayAffinity.argtypes = [wintypes.HWND, wintypes.DWORD]
+            user32.SetWindowDisplayAffinity.restype = wintypes.BOOL
+    except Exception:
+        user32 = None
+
 
 
 class PreviewOverlay(QWidget):

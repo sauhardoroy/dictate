@@ -5,43 +5,42 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules, coll
 
 block_cipher = None
 
-# Collect faster_whisper, ctranslate2, sounddevice, onnxruntime assets and DLLs
+# Collect sherpa_onnx, onnxruntime, sounddevice assets and DLLs
 datas = []
-datas += collect_data_files('faster_whisper')
-datas += collect_data_files('ctranslate2')
+datas += collect_data_files('sherpa_onnx')
 datas += collect_data_files('onnxruntime')
 
 # Include LICENSE
 if os.path.exists('LICENSE'):
     datas.append(('LICENSE', '.'))
 
+# Include hotwords.txt (custom vocabulary & jargon dictionary)
+if os.path.exists('hotwords.txt'):
+    datas.append(('hotwords.txt', '.'))
+
 # Include assets (earcons, sounds)
 if os.path.exists('assets'):
     datas.append(('assets', 'assets'))
 
-# Add local models folder
-models_dir = os.path.abspath('models')
-if os.path.exists(models_dir):
-    datas.append((models_dir, 'models'))
 
 binaries = []
-binaries += collect_dynamic_libs('ctranslate2')
+binaries += collect_dynamic_libs('sherpa_onnx')
 binaries += collect_dynamic_libs('onnxruntime')
 binaries += collect_dynamic_libs('sounddevice')
 
 hiddenimports = [
-    'faster_whisper',
-    'ctranslate2',
-    'sounddevice',
+    'sherpa_onnx',
     'onnxruntime',
+    'sounddevice',
+    'numpy',
     'pyperclip',
+    'huggingface_hub',
     'PyQt6',
     'PyQt6.QtCore',
     'PyQt6.QtGui',
     'PyQt6.QtWidgets',
 ]
-hiddenimports += collect_submodules('faster_whisper')
-hiddenimports += collect_submodules('ctranslate2')
+hiddenimports += collect_submodules('sherpa_onnx')
 
 a = Analysis(
     ['main.py'],

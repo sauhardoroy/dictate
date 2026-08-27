@@ -22,12 +22,78 @@ HALLUCINATION_BLOCKLIST = {
 
 from punctuation.voice_commands import apply_voice_formatting
 
+
 SYSTEM_PROMPT = (
-    "You are an expert dictation assistant. Your task is to clean up the following raw speech transcript. "
-    "Remove filler words (um, uh, like, you know), fix grammatical stuttering, and ensure perfect punctuation. "
-    "Maintain the exact original meaning and tone. DO NOT add conversational responses like 'Here is the text'. "
-    "Output ONLY the cleaned text and nothing else. JUST give the clean text as your response and nothing else"
+    "You are an expert dictation assistant. Your task is to clean up the following speech transcript verbatim. "
+    "Remove minor verbal filler words (um, uh) and fix punctuation and casing. "
+    "CRITICAL REQUIREMENT: Do NOT summarize. Do NOT condense or omit any sentences or ideas. "
+    "Preserve the entire full-length transcript word-for-word. "
+    "DO NOT add conversational filler like 'Here is the text'. Output ONLY the cleaned transcript."
 )
+
+
+
+import os
+import sys
+
+_HOTWORDS_CACHE = None
+_HOTWORDS_MTIME = 0
+
+
+def get_hotwords_mapping(hotwords_file: str = "hotwords.txt") -> dict[str, str]:
+    """Load hotwords.txt and return a case-correction mapping {lowercase_phrase: CanonicalCase}."""
+    global _HOTWORDS_CACHE, _HOTWORDS_MTIME
+    candidates = [
+        hotwords_file,
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), hotwords_file),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hotwords.txt"),
+        os.path.join(os.path.dirname(sys.executable), "hotwords.txt") if getattr(sys, "frozen", False) else "",
+    ]
+    resolved_path = None
+    for cand in candidates:
+        if cand and os.path.isfile(cand) and os.path.getsize(cand) > 0:
+            resolved_path = os.path.abspath(cand)
+            break
+
+    if not resolved_path:
+        return {}
+
+    try:
+        mtime = os.path.getmtime(resolved_path)
+        if _HOTWORDS_CACHE is not None and mtime == _HOTWORDS_MTIME:
+            return _HOTWORDS_CACHE
+
+        mapping = {}
+        with open(resolved_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                term = line.split(":")[0].strip()
+                if term and term.lower() != term:  # Has specific casing (e.g. PyTorch, Next.js, REST API)
+                    mapping[term.lower()] = term
+
+        _HOTWORDS_CACHE = mapping
+        _HOTWORDS_MTIME = mtime
+        return mapping
+    except Exception as exc:
+        log.warning("Failed to load hotwords mapping from %s: %s", resolved_path, exc)
+        return {}
+
+
+def apply_hotwords_casing(text: str, hotwords_file: str = "hotwords.txt") -> str:
+    """Restore canonical casing for known technical jargon from hotwords.txt."""
+    mapping = get_hotwords_mapping(hotwords_file)
+    if not mapping or not text:
+        return text
+
+    # Sort keys by length descending so longer multi-word phrases match first
+    for lower_phrase in sorted(mapping.keys(), key=len, reverse=True):
+        canonical = mapping[lower_phrase]
+        # Match as whole word/phrase
+        pattern = r"(?<!\w)" + re.escape(lower_phrase) + r"(?!\w)"
+        text = re.sub(pattern, canonical, text, flags=re.IGNORECASE)
+    return text
 
 
 def polish(text: str, settings: dict = None) -> str:
@@ -43,32 +109,38 @@ def polish(text: str, settings: dict = None) -> str:
     if enable_commands:
         t = apply_voice_formatting(t)
 
+    hotwords_file = settings.get("hotwords_file", "hotwords.txt") if settings else "hotwords.txt"
+
     if settings and settings.get("ai_polish", False):
-        t = _llm_polish(t, settings)
+        t = _llm_polish(t, settings, hotwords_file=hotwords_file)
     else:
-        t = _light_polish(t)
+        t = _light_polish(t, hotwords_file=hotwords_file)
         
     return t
 
-def _light_polish(text: str) -> str:
+
+def _light_polish(text: str, hotwords_file: str = "hotwords.txt") -> str:
     if not text:
         return ""
-    t = re.sub(r"[ \t]+([,.!?;:])", r"\1", text)
-    t = t[0].upper() + t[1:]
+    t = apply_hotwords_casing(text, hotwords_file=hotwords_file)
+    t = re.sub(r"[ \t]+([,.!?;:])", r"\1", t)
+    if t:
+        t = t[0].upper() + t[1:]
     if t.endswith(","):
         t = t[:-1]
     if t and t[-1] not in ".!?\"'\u201d\u2019\n":
         t += "."
     return t
 
-def _llm_polish(text: str, settings: dict) -> str:
+
+def _llm_polish(text: str, settings: dict, hotwords_file: str = "hotwords.txt") -> str:
     api_key = settings.get("ai_polish_api_key", "").strip()
     base_url = settings.get("ai_polish_base_url", "https://integrate.api.nvidia.com/v1").strip().rstrip("/")
     model = settings.get("ai_polish_model", "nvidia/nemotron-3-nano-30b-a3b").strip()
 
     # If no base_url or model, fallback to light polish
     if not base_url or not model:
-        return _light_polish(text)
+        return _light_polish(text, hotwords_file=hotwords_file)
 
     headers = {
         "Content-Type": "application/json",
@@ -78,11 +150,14 @@ def _llm_polish(text: str, settings: dict) -> str:
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
+    # First apply local casing so the LLM receives accurate technical hints
+    cased_text = apply_hotwords_casing(text, hotwords_file=hotwords_file)
+
     data = {
         "model": model,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": text}
+            {"role": "user", "content": cased_text}
         ],
         "temperature": 0.2,
         "top_p": 0.7,
@@ -113,7 +188,14 @@ def _llm_polish(text: str, settings: dict) -> str:
                 content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
 
             if not content:
-                return _light_polish(text)
+                return _light_polish(text, hotwords_file=hotwords_file)
+
+            # Safety check: if LLM summarized/omitted significant text, fall back to verbatim
+            in_words = len(text.split())
+            out_words = len(content.split())
+            if in_words >= 15 and out_words < int(in_words * 0.65):
+                log.warning("NVIDIA AI polish truncated text (%d -> %d words); falling back to verbatim", in_words, out_words)
+                return _light_polish(text, hotwords_file=hotwords_file)
 
             return content
     except urllib.error.HTTPError as e:

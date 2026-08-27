@@ -9,13 +9,15 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULTS = {
     "trigger_key": "ctrl+shift+p",
     "mode": "ptt",
-    "engine": "whisper",
-    "model": "small.en",
+    "engine": "parakeet",
+    "model": "parakeet-tdt-0.6b-v3",
     "compute_type": "auto",
     "device": "auto",
     "cpu_threads": 0,
     "initial_prompt": "",
     "language": "en",
+    "hotwords_file": "hotwords.txt",
+    "hotwords_score": 2.0,
     "vad_filter": True,
     "auto_stop": True,
     "vad_silence_seconds": 1.4,
@@ -24,7 +26,7 @@ DEFAULTS = {
     "ai_polish_base_url": "https://integrate.api.nvidia.com/v1",
     "ai_polish_model": "nvidia/nemotron-3-nano-30b-a3b",
     "injection_delay_ms": 150,
-    "restore_clipboard": True,
+    "restore_clipboard": False,
     "input_device": None,
     "show_pill": True,
     "nemotron_binary": "",
@@ -36,7 +38,7 @@ DEFAULTS = {
     "enable_history": True,
     "max_history_entries": 100,
     "show_interim_preview": True,
-    "streaming_model": "zipformer-70M",
+    "streaming_model": "nemo-fast-conformer-80ms",
 }
 
 
@@ -50,8 +52,13 @@ def get_base_dir() -> str:
 
 def settings_dir() -> str:
     if is_frozen():
-        appdata = os.environ.get("APPDATA") or os.path.expanduser("~")
-        path = os.path.join(appdata, "Dictate")
+        if sys.platform == "darwin":
+            path = os.path.expanduser("~/Library/Application Support/Dictate")
+        elif sys.platform == "win32":
+            appdata = os.environ.get("APPDATA") or os.path.expanduser("~")
+            path = os.path.join(appdata, "Dictate")
+        else:
+            path = os.path.expanduser("~/.config/dictate")
         os.makedirs(path, exist_ok=True)
         return path
     return PROJECT_ROOT
@@ -97,13 +104,15 @@ _COMPUTE_TYPES = {
 _VALIDATORS = {
     "trigger_key": _is_nonempty_string,
     "mode": lambda value: value in {"ptt", "toggle"},
-    "engine": lambda value: value in {"whisper", "nemotron"},
+    "engine": lambda value: value in {"whisper", "nemotron", "parakeet", "sherpa-onnx", "sense-voice"},
     "model": _is_nonempty_string,
     "compute_type": lambda value: value in _COMPUTE_TYPES,
     "device": lambda value: value in {"cpu", "cuda", "auto"},
     "cpu_threads": _is_cpu_threads,
     "initial_prompt": lambda value: isinstance(value, str),
     "language": lambda value: isinstance(value, str),
+    "hotwords_file": lambda value: isinstance(value, str),
+    "hotwords_score": lambda value: isinstance(value, (int, float)) and not isinstance(value, bool) and 0.1 <= value <= 10.0,
     "vad_filter": _is_bool,
     "auto_stop": _is_bool,
     "vad_silence_seconds": _is_silence_seconds,
@@ -176,25 +185,54 @@ class Settings:
 
 
 def set_autostart(enabled: bool):
-    """Create/remove a launcher script in the user's Startup folder."""
-    startup_dir = os.path.join(
-        os.environ.get("APPDATA", ""),
-        r"Microsoft\Windows\Start Menu\Programs\Startup",
-    )
-    bat = os.path.join(startup_dir, "Dictate.bat")
-    if enabled:
-        os.makedirs(startup_dir, exist_ok=True)
-        if is_frozen():
-            exe_path = sys.executable
-            exe_dir = os.path.dirname(exe_path)
-            content = "@echo off\r\n" f'cd /d "{exe_dir}"\r\n' f'start "" "{exe_path}"\r\n'
+    """Create/remove a launcher script in Windows Startup or macOS LaunchAgents."""
+    if sys.platform == "win32":
+        startup_dir = os.path.join(
+            os.environ.get("APPDATA", ""),
+            r"Microsoft\Windows\Start Menu\Programs\Startup",
+        )
+        bat = os.path.join(startup_dir, "Dictate.bat")
+        if enabled:
+            os.makedirs(startup_dir, exist_ok=True)
+            if is_frozen():
+                exe_path = sys.executable
+                exe_dir = os.path.dirname(exe_path)
+                content = "@echo off\r\n" f'cd /d "{exe_dir}"\r\n' f'start "" "{exe_path}"\r\n'
+            else:
+                main_py = os.path.join(PROJECT_ROOT, "main.py")
+                content = "@echo off\r\n" f'cd /d "{PROJECT_ROOT}"\r\n' f'start "" "{sys.executable}" "{main_py}"\r\n'
+            with open(bat, "w", encoding="utf-8") as f:
+                f.write(content)
         else:
-            main_py = os.path.join(PROJECT_ROOT, "main.py")
-            content = "@echo off\r\n" f'cd /d "{PROJECT_ROOT}"\r\n' f'start "" "{sys.executable}" "{main_py}"\r\n'
-        with open(bat, "w", encoding="utf-8") as f:
-            f.write(content)
-    else:
-        try:
-            os.remove(bat)
-        except FileNotFoundError:
-            pass
+            try:
+                os.remove(bat)
+            except FileNotFoundError:
+                pass
+    elif sys.platform == "darwin":
+        plist_dir = os.path.expanduser("~/Library/LaunchAgents")
+        plist_file = os.path.join(plist_dir, "com.dictate.app.plist")
+        if enabled:
+            os.makedirs(plist_dir, exist_ok=True)
+            exe_path = sys.executable
+            plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.dictate.app</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{exe_path}</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>"""
+            with open(plist_file, "w", encoding="utf-8") as f:
+                f.write(plist_content)
+        else:
+            try:
+                os.remove(plist_file)
+            except FileNotFoundError:
+                pass
+

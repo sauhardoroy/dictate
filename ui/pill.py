@@ -12,6 +12,7 @@ import time
 
 from PyQt6.QtCore import QEasingCurve, QPoint, QPointF, QRect, QRectF, Qt, QTimer, QVariantAnimation, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QImage, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
+import sys
 from PyQt6.QtWidgets import QApplication, QMenu, QWidget
 
 from ui import theme
@@ -21,31 +22,49 @@ GWL_EXSTYLE = -20
 WS_EX_NOACTIVATE = 0x08000000
 WDA_EXCLUDEFROMCAPTURE = 0x00000011
 
-user32 = ctypes.windll.user32
-GetWindowLong = getattr(user32, "GetWindowLongPtrW", user32.GetWindowLongW)
-SetWindowLong = getattr(user32, "SetWindowLongPtrW", user32.SetWindowLongW)
-GetWindowLong.argtypes = [wintypes.HWND, ctypes.c_int]
-GetWindowLong.restype = ctypes.c_ssize_t
-SetWindowLong.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t]
-SetWindowLong.restype = ctypes.c_ssize_t
+user32 = None
+GetWindowLong = None
+SetWindowLong = None
 
-if hasattr(user32, "SetWindowDisplayAffinity"):
-    user32.SetWindowDisplayAffinity.argtypes = [wintypes.HWND, wintypes.DWORD]
-    user32.SetWindowDisplayAffinity.restype = wintypes.BOOL
+if sys.platform == "win32":
+    try:
+        user32 = ctypes.windll.user32
+        GetWindowLong = getattr(user32, "GetWindowLongPtrW", user32.GetWindowLongW)
+        SetWindowLong = getattr(user32, "SetWindowLongPtrW", user32.SetWindowLongW)
+        GetWindowLong.argtypes = [wintypes.HWND, ctypes.c_int]
+        GetWindowLong.restype = ctypes.c_ssize_t
+        SetWindowLong.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t]
+        SetWindowLong.restype = ctypes.c_ssize_t
+
+        if hasattr(user32, "SetWindowDisplayAffinity"):
+            user32.SetWindowDisplayAffinity.argtypes = [wintypes.HWND, wintypes.DWORD]
+            user32.SetWindowDisplayAffinity.restype = wintypes.BOOL
+    except Exception:
+        user32 = None
 
 
 def _is_windows_dark_mode() -> bool:
-    try:
-        import winreg
-        key = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
-        )
-        value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
-        winreg.CloseKey(key)
-        return value == 0
-    except Exception:
-        return True
+    if sys.platform == "win32":
+        try:
+            import winreg
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+            )
+            value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+            winreg.CloseKey(key)
+            return value == 0
+        except Exception:
+            return True
+    elif sys.platform == "darwin":
+        try:
+            hints = QApplication.styleHints()
+            if hasattr(hints, "colorScheme"):
+                return hints.colorScheme() == Qt.ColorScheme.Dark
+        except Exception:
+            pass
+    return True
+
 
 
 class Pill(QWidget):
@@ -213,8 +232,18 @@ class Pill(QWidget):
         prev_style = theme.STATES.get(self._state, theme.STATES["idle"])
         style = theme.STATES[state]
         self._state = state
-        self._detail = detail
-        self.setToolTip(f"Dictate — {style.label}" + (f"\n{detail}" if detail else ""))
+        if state == "recording":
+            tip = "Dictate — Listening…\nClick pill to stop & transcribe"
+            if detail:
+                tip += f"\n{detail}"
+            self.setToolTip(tip)
+        elif state == "idle":
+            tip = "Dictate — Ready\nClick pill or press hotkey to record"
+            if detail:
+                tip += f"\n{detail}"
+            self.setToolTip(tip)
+        else:
+            self.setToolTip(f"Dictate — {style.label}" + (f"\n{detail}" if detail else ""))
 
         if style.width != int(self._width):
             self._start_morph(style.width)

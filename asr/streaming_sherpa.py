@@ -40,47 +40,44 @@ class SherpaStreamingEngine:
     def is_available(self) -> bool:
         return self._is_ready and self.recognizer is not None
 
-    def load(self, model_choice: str = "zipformer-70M", async_download: bool = False) -> bool:
-        """Initialize the Sherpa-ONNX online recognizer with the chosen model."""
+    def load(self, model_choice: str = "nemo-fast-conformer-80ms", async_download: bool = False) -> bool:
+        """Initialize the Sherpa-ONNX online recognizer with NVIDIA FastConformer CTC."""
         try:
             import sherpa_onnx
-            import huggingface_hub
+            from asr.model_manager import ensure_model_downloaded
         except ImportError:
-            log.warning("sherpa-onnx/huggingface_hub not installed; streaming live preview disabled")
+            log.warning("sherpa-onnx not installed; streaming live preview disabled")
             return False
 
+        # NVIDIA FastConformer CTC (80ms Streaming)
+        try:
+            model_dir = ensure_model_downloaded("nemo-fast-conformer-80ms")
+            log.info("Loading NVIDIA Streaming FastConformer CTC (80ms)...")
+            self.recognizer = sherpa_onnx.OnlineRecognizer.from_nemo_ctc(
+                model=os.path.join(model_dir, "model.onnx"),
+                tokens=os.path.join(model_dir, "tokens.txt"),
+                num_threads=4,
+                sample_rate=16000,
+                feature_dim=80,
+                decoding_method="greedy_search",
+            )
+            self._is_ready = True
+            log.info("NVIDIA Streaming FastConformer CTC ready")
+            return True
+        except Exception as e:
+            log.warning("FastConformer load failed (%s); checking local models", e)
+
         models_base = get_models_dir()
+        high_acc_dir = os.path.join(models_base, "sherpa-onnx-streaming-zipformer-en-2023-06-26")
+        enc_high = os.path.join(high_acc_dir, "encoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx")
+        dec_high = os.path.join(high_acc_dir, "decoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx")
+        join_high = os.path.join(high_acc_dir, "joiner-epoch-99-avg-1-chunk-16-left-128.int8.onnx")
+        tokens_high = os.path.join(high_acc_dir, "tokens.txt")
 
-        # 1. NVIDIA FastConformer CTC (80ms Streaming)
-        if model_choice in ("nemo-fast-conformer-80ms", "fast-conformer"):
-            try:
-                repo = "csukuangfj/sherpa-onnx-nemo-streaming-fast-conformer-ctc-en-80ms"
-                model_dir = huggingface_hub.snapshot_download(repo, allow_patterns=["model.onnx", "tokens.txt"])
-                log.info("Loading NVIDIA Streaming FastConformer CTC (80ms)...")
-                self.recognizer = sherpa_onnx.OnlineRecognizer.from_nemo_ctc(
-                    model=os.path.join(model_dir, "model.onnx"),
-                    tokens=os.path.join(model_dir, "tokens.txt"),
-                    num_threads=4,
-                    sample_rate=16000,
-                    feature_dim=80,
-                    decoding_method="greedy_search",
-                )
-                self._is_ready = True
-                return True
-            except Exception as e:
-                log.exception("FastConformer load failed: %s", e)
+        if os.path.exists(enc_high) and os.path.exists(dec_high) and os.path.exists(join_high) and os.path.exists(tokens_high):
+            log.info("Loading high-accuracy Sherpa Zipformer 70M streaming model...")
+            return self._init_recognizer(tokens_high, enc_high, dec_high, join_high)
 
-        # 2. Handle 70M High Accuracy English Zipformer
-        if model_choice in ("zipformer-70M", "sherpa-onnx-streaming-zipformer-en-2023-06-26", "en-70M"):
-            high_acc_dir = os.path.join(models_base, "sherpa-onnx-streaming-zipformer-en-2023-06-26")
-            enc_high = os.path.join(high_acc_dir, "encoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx")
-            dec_high = os.path.join(high_acc_dir, "decoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx")
-            join_high = os.path.join(high_acc_dir, "joiner-epoch-99-avg-1-chunk-16-left-128.int8.onnx")
-            tokens_high = os.path.join(high_acc_dir, "tokens.txt")
-
-            if os.path.exists(enc_high) and os.path.exists(dec_high) and os.path.exists(join_high) and os.path.exists(tokens_high):
-                log.info("Loading high-accuracy Sherpa Zipformer 70M streaming model...")
-                return self._init_recognizer(tokens_high, enc_high, dec_high, join_high)
 
         # 3. Handle Bilingual Zh/En Zipformer
         if model_choice in ("bilingual-zh-en", "zipformer-bilingual-zh-en", "sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20"):

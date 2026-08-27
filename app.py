@@ -9,8 +9,9 @@ Threading model:
 import sys
 import threading
 import os
-import winsound
 
+
+import numpy as np
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtWidgets import QApplication, QDialog
 
@@ -113,9 +114,15 @@ class DictateApp(QObject):
             log.exception("hotkey registration failed: %s", exc)
 
         if load_model:
-            message = (model_loading_message(self.settings["model"])
-                       if self.settings["engine"] == "whisper"
-                       else "Loading Nemotron engine…")
+            model_name = self.settings.get("model", "parakeet-tdt-0.6b-v3")
+            if model_name == "parakeet-tdt-0.6b-v3" or self.settings.get("engine") == "parakeet":
+                message = "Loading NVIDIA Parakeet TDT engine…"
+            elif model_name == "sense-voice-small":
+                message = "Loading Alibaba SenseVoice engine…"
+            elif self.settings["engine"] == "nemotron":
+                message = "Loading Nemotron engine…"
+            else:
+                message = f"Loading {model_name} model…"
             self._set_state("loading", message)
             threading.Thread(target=self._load_engine, daemon=True).start()
         else:
@@ -134,13 +141,22 @@ class DictateApp(QObject):
     def _make_engine(self):
         if self.settings["engine"] == "nemotron":
             return NemotronEngine(binary=self.settings["nemotron_binary"])
-        model_name = self.settings.get("model", "small.en")
+        model_name = self.settings.get("model", "parakeet-tdt-0.6b-v3")
         if model_name == "parakeet-tdt-0.6b-v3" or self.settings.get("engine") == "parakeet":
             from asr.parakeet_engine import ParakeetTDTEngine
-            return ParakeetTDTEngine(num_threads=self.settings.get("cpu_threads", 4))
+            return ParakeetTDTEngine(
+                num_threads=self.settings.get("cpu_threads", 4),
+                hotwords_file=self.settings.get("hotwords_file", "hotwords.txt"),
+                hotwords_score=self.settings.get("hotwords_score", 2.0),
+                device=self.settings.get("device", "auto"),
+                language=self.settings.get("language", "en"),
+            )
         if model_name == "sense-voice-small" or model_name.startswith("moonshine-"):
             from asr.sherpa_offline_engine import SherpaOfflineEngine
-            return SherpaOfflineEngine(model_id=model_name, num_threads=self.settings.get("cpu_threads", 4))
+            return SherpaOfflineEngine(
+                model_id=model_name,
+                num_threads=self.settings.get("cpu_threads", 4),
+            )
         return FasterWhisperEngine(
             model_size=model_name,
             device=self.settings["device"],
@@ -205,18 +221,22 @@ class DictateApp(QObject):
 
     def _capture_target_window(self):
         try:
-            import ctypes
-            cur_fg = ctypes.windll.user32.GetForegroundWindow()
-            pill_hwnd = int(self.pill.winId()) if hasattr(self, "pill") and self.pill else 0
-            if cur_fg and cur_fg != pill_hwnd:
-                self.target_hwnd = cur_fg
-                from injection.sanitizer import _get_process_name
-                self.target_app_name = _get_process_name(cur_fg)
-                buf = (ctypes.c_wchar * 260)()
-                if ctypes.windll.user32.GetWindowTextW(cur_fg, buf, 260):
-                    self.target_window_title = buf.value
-                else:
-                    self.target_window_title = ""
+            if sys.platform == "win32":
+                import ctypes
+                cur_fg = ctypes.windll.user32.GetForegroundWindow()
+                pill_hwnd = int(self.pill.winId()) if hasattr(self, "pill") and self.pill else 0
+                if cur_fg and cur_fg != pill_hwnd:
+                    self.target_hwnd = cur_fg
+                    from injection.sanitizer import _get_process_name
+                    self.target_app_name = _get_process_name(cur_fg)
+                    buf = (ctypes.c_wchar * 260)()
+                    if ctypes.windll.user32.GetWindowTextW(cur_fg, buf, 260):
+                        self.target_window_title = buf.value
+                    else:
+                        self.target_window_title = ""
+            elif sys.platform == "darwin":
+                # On macOS, window focus is managed by the OS
+                self.target_hwnd = 0
         except Exception:
             pass
 
@@ -252,7 +272,12 @@ class DictateApp(QObject):
                 base_dir = os.path.dirname(os.path.abspath(__file__))
             path = os.path.join(base_dir, "assets", "sounds", f"{name}.wav")
             if os.path.exists(path):
-                winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+                if sys.platform == "win32":
+                    import winsound
+                    winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+                elif sys.platform == "darwin":
+                    import subprocess
+                    subprocess.Popen(["afplay", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except Exception:
             pass
 
@@ -381,7 +406,9 @@ class DictateApp(QObject):
 
         self._esc_hook = HotkeyManager("esc", "cancel", self.sig.esc_cancel.emit)
         self._esc_hook.register()
-        self._set_state("recording", "Listening\u2026")
+        auto_stop = bool(self.settings.get("auto_stop", True))
+        rec_msg = "Listening… (Auto-stops on silence)" if auto_stop else "Listening… (Click pill or tray to stop)"
+        self._set_state("recording", rec_msg)
         self._play_sound("start")
         self._reposition_preview()
         if self.settings.get("show_interim_preview", True):
@@ -556,7 +583,10 @@ class DictateApp(QObject):
     def _run_onboarding(self):
         from ui.onboarding import OnboardingDialog
 
-        dlg = OnboardingDialog(trigger_key=self.settings["trigger_key"])
+        dlg = OnboardingDialog(
+            trigger_key=self.settings["trigger_key"],
+            model_id=self.settings.get("model", "parakeet-tdt-0.6b-v3"),
+        )
         if dlg.exec() == OnboardingDialog.DialogCode.Accepted:
             self.settings["onboarding_completed"] = True
             log.info("onboarding completed")
@@ -571,7 +601,7 @@ class DictateApp(QObject):
             vals = dlg.values()
 
             # Detect whether the ASR engine needs a reload
-            engine_keys = ("model", "engine", "device", "compute_type", "language", "vad_filter", "cpu_threads")
+            engine_keys = ("model", "engine", "device", "compute_type", "language", "vad_filter", "cpu_threads", "hotwords_file", "hotwords_score")
             engine_changed = any(vals.get(k) != self.settings.get(k) for k in engine_keys
                                  if k in vals)
 
@@ -581,7 +611,7 @@ class DictateApp(QObject):
             log.info("settings updated: %s", ", ".join(sorted(vals.keys())))
 
             if hasattr(self, "streaming_engine") and streaming_changed:
-                new_s_model = vals.get("streaming_model", "zipformer-70M")
+                new_s_model = vals.get("streaming_model", "nemo-fast-conformer-80ms")
                 threading.Thread(target=lambda: self.streaming_engine.load(new_s_model), daemon=True).start()
 
             if hasattr(self, "preview") and self.preview:
@@ -625,9 +655,15 @@ class DictateApp(QObject):
         # Build the new engine from updated settings
         self.engine = self._make_engine()
 
-        message = (model_loading_message(self.settings["model"])
-                   if self.settings["engine"] == "whisper"
-                   else "Loading Nemotron engine…")
+        model_name = self.settings.get("model", "parakeet-tdt-0.6b-v3")
+        if model_name == "parakeet-tdt-0.6b-v3" or self.settings.get("engine") == "parakeet":
+            message = "Loading NVIDIA Parakeet TDT engine…"
+        elif model_name == "sense-voice-small":
+            message = "Loading Alibaba SenseVoice engine…"
+        elif self.settings["engine"] == "nemotron":
+            message = "Loading Nemotron engine…"
+        else:
+            message = f"Loading {model_name} model…"
         self._set_state("loading", message)
         threading.Thread(target=self._load_engine, daemon=True).start()
 

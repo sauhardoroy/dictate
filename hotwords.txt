@@ -1,0 +1,1000 @@
+Artificial Intelligence:2.0
+Machine Learning:2.0
+Deep Learning:2.0
+Neural Network:2.0
+Transformer:2.0
+Attention Mechanism:2.0
+Large Language Model:2.0
+LLM:2.0
+RAG:2.0
+Retrieval-Augmented Generation:2.0
+Generative AI:2.0
+Prompt Engineering:2.0
+Fine-tuning:2.0
+Zero-shot:2.0
+Few-shot:2.0
+LoRA:2.0
+Quantization:2.0
+Hyperparameter:2.0
+Epoch:2.0
+Gradient Descent:2.0
+Backpropagation:2.0
+CUDA:2.0
+Tensor:2.0
+PyTorch:2.0
+TensorFlow:2.0
+Keras:2.0
+Scikit-learn:2.0
+Hugging Face:2.0
+Pinecone:2.0
+ChromaDB:2.0
+Vector Database:2.0
+Embedding:2.0
+OpenAI:2.0
+ChatGPT:2.0
+Claude:2.0
+Anthropic:2.0
+Mistral:2.0
+Llama:2.0
+Gemini:2.0
+AutoGPT:2.0
+LangChain:2.0
+LlamaIndex:2.0
+Weights and Biases:2.0
+MLflow:2.0
+MLOps:2.0
+Model Drift:2.0
+Overfitting:2.0
+Underfitting:2.0
+Precision:2.0
+Recall:2.0
+F1 Score:2.0
+Cross-validation:2.0
+Batch Size:2.0
+Learning Rate:2.0
+Optimizer:2.0
+Adam:2.0
+SGD:2.0
+Softmax:2.0
+ReLU:2.0
+Sigmoid:2.0
+Dropout:2.0
+Batch Normalization:2.0
+Attention Head:2.0
+Self-attention:2.0
+Positional Encoding:2.0
+Tokenizer:2.0
+BPE:2.0
+Word2Vec:2.0
+GloVe:2.0
+BERT:2.0
+RoBERTa:2.0
+GPT:2.0
+T5:2.0
+ALBERT:2.0
+Vision Transformer:2.0
+YOLO:2.0
+ResNet:2.0
+VGG:2.0
+ImageNet:2.0
+COCO:2.0
+Data Augmentation:2.0
+Synthetic Data:2.0
+Knowledge Distillation:2.0
+Federated Learning:2.0
+Reinforcement Learning:2.0
+Q-Learning:2.0
+PPO:2.0
+DDPG:2.0
+Actor-Critic:2.0
+Reward Function:2.0
+Policy Gradient:2.0
+Markov Decision Process:2.0
+State Space:2.0
+Action Space:2.0
+Environment:2.0
+Agent:2.0
+Diffusion Model:2.0
+Stable Diffusion:2.0
+Midjourney:2.0
+DALL-E:2.0
+Latent Space:2.0
+Generative Adversarial Network:2.0
+GAN:2.0
+Autoencoder:2.0
+Variational Autoencoder:2.0
+VAE:2.0
+Recurrent Neural Network:2.0
+RNN:2.0
+LSTM:2.0
+GRU:2.0
+Natural Language Processing:2.0
+NLP:2.0
+Computer Vision:2.0
+Speech Recognition:2.0
+Text-to-Speech:2.0
+TTS:2.0
+ASR:2.0
+Sherpa-ONNX:2.0
+ONNX:2.0
+TensorRT:2.0
+Inference:2.0
+Deployment:2.0
+Edge AI:2.0
+Federated Analytics:2.0
+Explainable AI:2.0
+XAI:2.0
+SHAP:2.0
+LIME:2.0
+Bias in AI:2.0
+AI Ethics:2.0
+AGI:2.0
+Artificial General Intelligence:2.0
+Singularity:2.0
+Turing Test:2.0
+Chatbot:2.0
+Conversational AI:2.0
+Virtual Assistant:2.0
+Copilot:2.0
+Semantic Search:2.0
+Named Entity Recognition:2.0
+NER:2.0
+Part-of-Speech Tagging:2.0
+POS:2.0
+Dependency Parsing:2.0
+Sentiment Analysis:2.0
+Text Summarization:2.0
+Machine Translation:2.0
+NMT:2.0
+Python:2.0
+C++:2.0
+React:2.0
+Next.js:2.0
+Supabase:2.0
+Tailwind CSS:2.0
+JavaScript:2.0
+TypeScript:2.0
+HTML:2.0
+CSS:2.0
+Node.js:2.0
+Express:2.0
+FastAPI:2.0
+Flask:2.0
+Django:2.0
+SQLAlchemy:2.0
+Pydantic:2.0
+Pandas:2.0
+NumPy:2.0
+Matplotlib:2.0
+Seaborn:2.0
+Celery:2.0
+Redis:2.0
+RabbitMQ:2.0
+Docker:2.0
+Kubernetes:2.0
+CI/CD:2.0
+GitHub Actions:2.0
+Jenkins:2.0
+Terraform:2.0
+AWS:2.0
+Azure:2.0
+GCP:2.0
+EC2:2.0
+S3:2.0
+Lambda:2.0
+Serverless:2.0
+Microservices:2.0
+REST API:2.0
+GraphQL:2.0
+WebSockets:2.0
+gRPC:2.0
+Protobuf:2.0
+JSON:2.0
+XML:2.0
+YAML:2.0
+SQL:2.0
+NoSQL:2.0
+PostgreSQL:2.0
+MongoDB:2.0
+Cassandra:2.0
+Elasticsearch:2.0
+Kafka:2.0
+Spark:2.0
+Hadoop:2.0
+Git:2.0
+Commit:2.0
+Push:2.0
+Pull Request:2.0
+Merge Conflict:2.0
+Branch:2.0
+Tag:2.0
+Stash:2.0
+Rebase:2.0
+Cherry-pick:2.0
+Debugging:2.0
+Stack Trace:2.0
+Segmentation Fault:2.0
+Memory Leak:2.0
+Profiling:2.0
+Unit Testing:2.0
+Integration Testing:2.0
+TDD:2.0
+BDD:2.0
+Mocking:2.0
+Pytest:2.0
+GTest:2.0
+CMake:2.0
+Make:2.0
+GCC:2.0
+Clang:2.0
+GDB:2.0
+Valgrind:2.0
+IDE:2.0
+VS Code:2.0
+Vim:2.0
+Emacs:2.0
+Pointers:2.0
+Virtual Functions:2.0
+Polymorphism:2.0
+Inheritance:2.0
+Encapsulation:2.0
+Abstraction:2.0
+Classes:2.0
+Objects:2.0
+Methods:2.0
+Attributes:2.0
+Constructors:2.0
+Destructors:2.0
+Memory Management:2.0
+Garbage Collection:2.0
+Multi-threading:2.0
+Concurrency:2.0
+Asyncio:2.0
+Decorators:2.0
+Generators:2.0
+Iterators:2.0
+List Comprehension:2.0
+Lambda Functions:2.0
+Frontend:2.0
+Backend:2.0
+Full-stack:2.0
+UI/UX:2.0
+Responsive Design:2.0
+WebAssembly:2.0
+Wasm:2.0
+Service Worker:2.0
+Progressive Web App:2.0
+PWA:2.0
+Single Page Application:2.0
+SPA:2.0
+Server-Side Rendering:2.0
+SSR:2.0
+Static Site Generation:2.0
+SSG:2.0
+Vite:2.0
+Webpack:2.0
+Babel:2.0
+ESLint:2.0
+Prettier:2.0
+npm:2.0
+Yarn:2.0
+pnpm:2.0
+Pip:2.0
+Conda:2.0
+Virtualenv:2.0
+Jupyter:2.0
+Colab:2.0
+Data Pipeline:2.0
+ETL:2.0
+ELT:2.0
+Data Warehouse:2.0
+Data Lake:2.0
+Data Engineering:2.0
+Data Science:2.0
+Analytics:2.0
+Business Intelligence:2.0
+Dashboard:2.0
+MECE:2.0
+Market Sizing:2.0
+Corporate Strategy:2.0
+Oliver Wyman:2.0
+PwC:2.0
+Big 3:2.0
+MBB:2.0
+BCG:2.0
+McKinsey:2.0
+Bain:2.0
+IIM Bangalore:2.0
+KU Leuven:2.0
+EBITDA:2.0
+ROI:2.0
+KPI:2.0
+OKR:2.0
+Go-to-market:2.0
+GTM:2.0
+Value Chain:2.0
+SWOT:2.0
+PESTLE:2.0
+Porter's Five Forces:2.0
+Blue Ocean Strategy:2.0
+Red Ocean:2.0
+Synergy:2.0
+Boil the Ocean:2.0
+Deep Dive:2.0
+Touch Base:2.0
+Circle Back:2.0
+Paradigm Shift:2.0
+Core Competency:2.0
+Value Proposition:2.0
+B2B:2.0
+B2C:2.0
+D2C:2.0
+SaaS:2.0
+MRR:2.0
+ARR:2.0
+Churn Rate:2.0
+CAC:2.0
+LTV:2.0
+TAM:2.0
+SAM:2.0
+SOM:2.0
+Pitch Deck:2.0
+Stakeholder Management:2.0
+Deliverable:2.0
+Milestone:2.0
+Bottleneck:2.0
+Bandwidth:2.0
+Low-hanging Fruit:2.0
+Move the Needle:2.0
+Scalability:2.0
+Agile:2.0
+Scrum:2.0
+Kanban:2.0
+Sprint:2.0
+Backlog:2.0
+MVP:2.0
+Product-Market Fit:2.0
+Pivot:2.0
+Run Rate:2.0
+Burn Rate:2.0
+Cash Flow:2.0
+Balance Sheet:2.0
+Income Statement:2.0
+Profit and Loss:2.0
+Capex:2.0
+Opex:2.0
+Depreciation:2.0
+Amortization:2.0
+Valuation:2.0
+DCF:2.0
+Discounted Cash Flow:2.0
+WACC:2.0
+IRR:2.0
+NPV:2.0
+Mergers and Acquisitions:2.0
+M&A:2.0
+Due Diligence:2.0
+Joint Venture:2.0
+Strategic Alliance:2.0
+Outsourcing:2.0
+Offshoring:2.0
+Supply Chain Management:2.0
+Logistics:2.0
+Procurement:2.0
+Inventory Management:2.0
+Six Sigma:2.0
+Lean Manufacturing:2.0
+Kaizen:2.0
+Total Quality Management:2.0
+Just-in-Time:2.0
+Change Management:2.0
+Corporate Governance:2.0
+Compliance:2.0
+ESG:2.0
+CSR:2.0
+Venture Capital:2.0
+Private Equity:2.0
+Angel Investor:2.0
+Seed Round:2.0
+Series A:2.0
+Series B:2.0
+IPO:2.0
+SPAC:2.0
+Term Sheet:2.0
+Cap Table:2.0
+Equity:2.0
+Stock Options:2.0
+RSU:2.0
+Vesting:2.0
+Board of Directors:2.0
+C-suite:2.0
+CEO:2.0
+CFO:2.0
+COO:2.0
+CTO:2.0
+CMO:2.0
+CHRO:2.0
+Product Management:2.0
+Product Roadmap:2.0
+User Persona:2.0
+Customer Journey:2.0
+A/B Testing:2.0
+Conversion Rate:2.0
+Bounce Rate:2.0
+Funnel:2.0
+Flywheel:2.0
+Network Effects:2.0
+Economies of Scale:2.0
+Barriers to Entry:2.0
+Competitive Advantage:2.0
+Benchmarking:2.0
+Best Practices:2.0
+Thought Leadership:2.0
+Whitepaper:2.0
+Case Study:2.0
+Consulting Framework:2.0
+Issue Tree:2.0
+Hypothesis-driven:2.0
+Data-driven:2.0
+Actionable Insights:2.0
+Executive Summary:2.0
+Skibidi:2.0
+Rizz:2.0
+Cap:2.0
+No Cap:2.0
+Bussin:2.0
+Fr Fr:2.0
+For Real:2.0
+Bet:2.0
+Sus:2.0
+Cheugy:2.0
+Salty:2.0
+Ghosting:2.0
+Gaslighting:2.0
+Gatekeeping:2.0
+Girlboss:2.0
+Slay:2.0
+Yeet:2.0
+Vibe Check:2.0
+Main Character Energy:2.0
+Rent Free:2.0
+Touch Grass:2.0
+Drip:2.0
+Based:2.0
+Cringe:2.0
+Ratio:2.0
+W:2.0
+L:2.0
+GOAT:2.0
+Mid:2.0
+Simp:2.0
+Tea:2.0
+Spill the Tea:2.0
+Receipts:2.0
+Stan:2.0
+Periodt:2.0
+Moot:2.0
+Delulu:2.0
+Solulu:2.0
+Icks:2.0
+Red Flag:2.0
+Green Flag:2.0
+Beige Flag:2.0
+Situationship:2.0
+Soft Launch:2.0
+Hard Launch:2.0
+Lowkey:2.0
+Highkey:2.0
+Savage:2.0
+Boujee:2.0
+Ratchet:2.0
+Snack:2.0
+Thirsty:2.0
+Glow Up:2.0
+FOMO:2.0
+JOMO:2.0
+Macha:2.0
+Magga:2.0
+Oota:2.0
+Bhai:2.0
+Dada:2.0
+Lyad:2.0
+Nyaka:2.0
+Jugaad:2.0
+Fatafati:2.0
+Boka:2.0
+Chai:2.0
+Samosa:2.0
+Biryani:2.0
+Phuchka:2.0
+Auto:2.0
+Cab:2.0
+Traffic:2.0
+Monsoon:2.0
+Summer:2.0
+Winter:2.0
+Weekend:2.0
+Holiday:2.0
+Vacation:2.0
+Travel:2.0
+Backpacking:2.0
+Trekking:2.0
+Camping:2.0
+Beach:2.0
+Mountains:2.0
+City Life:2.0
+Nightlife:2.0
+Clubbing:2.0
+Party:2.0
+Gig:2.0
+Concert:2.0
+Festival:2.0
+Diwali:2.0
+Holi:2.0
+Durga Puja:2.0
+Navratri:2.0
+Christmas:2.0
+New Year:2.0
+Birthday:2.0
+Anniversary:2.0
+Wedding:2.0
+Engagement:2.0
+Dating:2.0
+Hinge:2.0
+Bumble:2.0
+Tinder:2.0
+Swiping:2.0
+Match:2.0
+Algorithm:2.0
+Doomscrolling:2.0
+Binge-watching:2.0
+Netflix:2.0
+Amazon Prime:2.0
+Spotify:2.0
+Podcast:2.0
+Vlog:2.0
+Influencer:2.0
+Content Creator:2.0
+Viral:2.0
+Trending:2.0
+Meme:2.0
+Reel:2.0
+TikTok:2.0
+Shorts:2.0
+Followers:2.0
+Subscribers:2.0
+Likes:2.0
+Comments:2.0
+Shares:2.0
+Troll:2.0
+Hater:2.0
+Cancel Culture:2.0
+Woke:2.0
+Boomer:2.0
+Millennial:2.0
+Gen Z:2.0
+Gen Alpha:2.0
+Adulting:2.0
+Burnout:2.0
+Self-care:2.0
+Mental Health:2.0
+Therapy:2.0
+Mindfulness:2.0
+Meditation:2.0
+Yoga:2.0
+Mechanical Engineering:2.0
+NIT Durgapur:2.0
+Thermodynamics:2.0
+Fluid Mechanics:2.0
+Heat Transfer:2.0
+Solid Mechanics:2.0
+Kinematics:2.0
+Dynamics:2.0
+Statics:2.0
+Material Science:2.0
+Metallurgy:2.0
+CAD:2.0
+CAM:2.0
+CAE:2.0
+AutoCAD:2.0
+SolidWorks:2.0
+ANSYS:2.0
+Finite Element Analysis:2.0
+FEA:2.0
+Computational Fluid Dynamics:2.0
+CFD:2.0
+Manufacturing:2.0
+Machining:2.0
+Welding:2.0
+Casting:2.0
+Forging:2.0
+Robotics:2.0
+Mechatronics:2.0
+Automation:2.0
+Control Systems:2.0
+PID:2.0
+Sensors:2.0
+Actuators:2.0
+Motors:2.0
+Pumps:2.0
+Compressors:2.0
+Turbines:2.0
+HVAC:2.0
+Aerodynamics:2.0
+Telemetry:2.0
+Formula 1:2.0
+F1:2.0
+DRS:2.0
+Drag Reduction System:2.0
+Downforce:2.0
+Paddock:2.0
+Pit Stop:2.0
+Oversteer:2.0
+Understeer:2.0
+Apex:2.0
+Slipstream:2.0
+Halo:2.0
+Slick Tires:2.0
+Compound:2.0
+Qualifying:2.0
+Pole Position:2.0
+Grid Penalty:2.0
+Safety Car:2.0
+VSC:2.0
+Checkered Flag:2.0
+Grand Prix:2.0
+Constructor:2.0
+Championship:2.0
+Chelsea FC:2.0
+Stamford Bridge:2.0
+Premier League:2.0
+Football:2.0
+Soccer:2.0
+Goal:2.0
+Assist:2.0
+Clean Sheet:2.0
+Offside:2.0
+VAR:2.0
+Red Card:2.0
+Yellow Card:2.0
+Penalty:2.0
+Free Kick:2.0
+Corner:2.0
+Tackle:2.0
+Dribble:2.0
+Pass:2.0
+Cross:2.0
+Header:2.0
+Manager:2.0
+Coach:2.0
+Tactics:2.0
+Formation:2.0
+Pressing:2.0
+Counter-attack:2.0
+Gym:2.0
+Fitness:2.0
+Workout:2.0
+Training:2.0
+Hypertrophy:2.0
+PR:2.0
+Personal Record:2.0
+Deadlift:2.0
+Squat:2.0
+Bench Press:2.0
+Protein:2.0
+Creatine:2.0
+Pre-workout:2.0
+DOMS:2.0
+Macros:2.0
+Cutting:2.0
+Bulking:2.0
+Cardio:2.0
+HIIT:2.0
+CrossFit:2.0
+Powerlifting:2.0
+Bodybuilding:2.0
+Calisthenics:2.0
+Flexibility:2.0
+Mobility:2.0
+Recovery:2.0
+Nutrition:2.0
+Diet:2.0
+Calories:2.0
+Guitar:2.0
+Acoustic:2.0
+Electric:2.0
+Bass:2.0
+Pentatonic:2.0
+Arpeggio:2.0
+Chords:2.0
+Tablature:2.0
+Fretboard:2.0
+Strumming:2.0
+Fingerpicking:2.0
+Lick:2.0
+Riff:2.0
+Solo:2.0
+Amp:2.0
+Amplifier:2.0
+Distortion:2.0
+Overdrive:2.0
+Reverb:2.0
+Delay:2.0
+Chorus:2.0
+Pedalboard:2.0
+Tuning:2.0
+Metronome:2.0
+Tempo:2.0
+Rhythm:2.0
+Melody:2.0
+Harmony:2.0
+Scale:2.0
+Octave:2.0
+Pitch:2.0
+Frequency:2.0
+Wavelength:2.0
+Amplitude:2.0
+Resonance:2.0
+Acoustics:2.0
+Cooking:2.0
+Recipe:2.0
+Ingredients:2.0
+Spices:2.0
+Baking:2.0
+Grilling:2.0
+Roasting:2.0
+Frying:2.0
+Boiling:2.0
+Steaming:2.0
+Simmering:2.0
+Sautéing:2.0
+Marinating:2.0
+Seasoning:2.0
+Chef:2.0
+Web3:2.0
+Blockchain:2.0
+Cryptocurrency:2.0
+Bitcoin:2.0
+Ethereum:2.0
+Smart Contract:2.0
+NFT:2.0
+DeFi:2.0
+DAO:2.0
+Metaverse:2.0
+AR:2.0
+VR:2.0
+XR:2.0
+Augmented Reality:2.0
+Virtual Reality:2.0
+Mixed Reality:2.0
+Spatial Computing:2.0
+IoT:2.0
+Internet of Things:2.0
+Edge Computing:2.0
+5G:2.0
+6G:2.0
+Cybersecurity:2.0
+Zero Trust:2.0
+Phishing:2.0
+Malware:2.0
+Ransomware:2.0
+Firewall:2.0
+VPN:2.0
+Encryption:2.0
+Cryptography:2.0
+Public Key:2.0
+Private Key:2.0
+Hash:2.0
+Salt:2.0
+Tokenization:2.0
+OAuth:2.0
+JWT:2.0
+SSO:2.0
+MFA:2.0
+Biometrics:2.0
+Cloud Computing:2.0
+IaaS:2.0
+PaaS:2.0
+DaaS:2.0
+FaaS:2.0
+BaaS:2.0
+API:2.0
+Webhook:2.0
+SDK:2.0
+CLI:2.0
+GUI:2.0
+UX:2.0
+UI:2.0
+Wireframe:2.0
+Prototype:2.0
+Figma:2.0
+Sketch:2.0
+Adobe XD:2.0
+Photoshop:2.0
+Illustrator:2.0
+Premiere Pro:2.0
+After Effects:2.0
+Blender:2.0
+Maya:2.0
+Unity:2.0
+Unreal Engine:2.0
+Game Development:2.0
+Esports:2.0
+Streaming:2.0
+Twitch:2.0
+Discord:2.0
+Slack:2.0
+Microsoft Teams:2.0
+Zoom:2.0
+Google Meet:2.0
+Notion:2.0
+Trello:2.0
+Asana:2.0
+Jira:2.0
+Confluence:2.0
+Miro:2.0
+Brainstorming:2.0
+Mind Mapping:2.0
+Design Thinking:2.0
+Innovation:2.0
+Disruption:2.0
+Digital Transformation:2.0
+RPA:2.0
+Robotic Process Automation:2.0
+Smart Home:2.0
+Wearables:2.0
+Smartwatch:2.0
+Fitness Tracker:2.0
+Drones:2.0
+UAV:2.0
+Autonomous Vehicles:2.0
+Self-driving Cars:2.0
+EV:2.0
+Electric Vehicle:2.0
+Battery:2.0
+Lithium-ion:2.0
+Solid-state:2.0
+Renewable Energy:2.0
+Solar:2.0
+Wind:2.0
+Hydro:2.0
+Geothermal:2.0
+Nuclear:2.0
+Fusion:2.0
+Fission:2.0
+SpaceX:2.0
+NASA:2.0
+ISRO:2.0
+ESA:2.0
+Astronomy:2.0
+Astrophysics:2.0
+Cosmology:2.0
+Quantum Computing:2.0
+Qubit:2.0
+Superposition:2.0
+Entanglement:2.0
+Quantum Supremacy:2.0
+Bioinformatics:2.0
+Genomics:2.0
+CRISPR:2.0
+Gene Editing:2.0
+Biotechnology:2.0
+Nanotechnology:2.0
+Graphene:2.0
+Carbon Nanotubes:2.0
+Semiconductor:2.0
+Microchip:2.0
+Transistor:2.0
+Moore's Law:2.0
+Silicon Valley:2.0
+Startup:2.0
+Incubator:2.0
+Accelerator:2.0
+Unicorn:2.0
+Decacorn:2.0
+Bootstrapping:2.0
+Crowdfunding:2.0
+Kickstarter:2.0
+Patreon:2.0
+Monetization:2.0
+Subscription:2.0
+Freemium:2.0
+Paywall:2.0
+Ad-supported:2.0
+Programmatic Advertising:2.0
+SEO:2.0
+SEM:2.0
+PPC:2.0
+CTR:2.0
+CPA:2.0
+ROAS:2.0
+Organic Traffic:2.0
+Backlinks:2.0
+Domain Authority:2.0
+Affiliate Marketing:2.0
+Influencer Marketing:2.0
+Content Marketing:2.0
+Email Marketing:2.0
+Newsletter:2.0
+Substack:2.0
+Medium:2.0
+Blogging:2.0
+Vlogging:2.0
+Parallel Processing:2.0
+Distributed Systems:2.0
+Fault Tolerance:2.0
+High Availability:2.0
+Load Balancing:2.0
+Reverse Proxy:2.0
+Nginx:2.0
+Apache:2.0
+Tomcat:2.0
+Web Server:2.0
+Application Server:2.0
+Database Indexing:2.0
+Query Optimization:2.0
+ACID:2.0
+BASE:2.0
+CAP Theorem:2.0
+Eventual Consistency:2.0
+Sharding:2.0
+Partitioning:2.0
+Replication:2.0
+Master-Slave:2.0
+Peer-to-Peer:2.0
+Client-Server:2.0
+Monolith:2.0
+Service-Oriented Architecture:2.0
+SOA:2.0
+Event-Driven:2.0
+Message Queue:2.0
+Pub/Sub:2.0
+State Machine:2.0
+Automata:2.0
+Turing Machine:2.0
+Complexity Theory:2.0
+Big O Notation:2.0
+Time Complexity:2.0
+Space Complexity:2.0
+Data Structure:2.0
+Array:2.0
+Linked List:2.0
+Stack:2.0
+Queue:2.0
+Tree:2.0
+Graph:2.0
+Hash Table:2.0
+Heap:2.0
+Trie:2.0
+Sorting:2.0
+Searching:2.0
+Binary Search:2.0
+Merge Sort:2.0
+Quick Sort:2.0
+Dynamic Programming:2.0
+Greedy Algorithm:2.0
+Backtracking:2.0
+Divide and Conquer:2.0
+Graph Traversal:2.0
+BFS:2.0
+DFS:2.0
+Dijkstra:2.0
+A*:2.0
+Minimum Spanning Tree:2.0
+Kruskal:2.0
+Prim:2.0
+RSA:2.0
+AES:2.0
+DES:2.0
+SHA-256:2.0
+MD5:2.0
+Digital Signature:2.0
+Certificate Authority:2.0
+SSL:2.0
+TLS:2.0
+HTTPS:2.0
+DNS:2.0
+TCP:2.0
+UDP:2.0
+IP:2.0
+MAC Address:2.0

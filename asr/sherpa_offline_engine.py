@@ -30,13 +30,12 @@ class SherpaOfflineEngine(ASREngine):
 
     def load(self):
         import sherpa_onnx
-        import huggingface_hub
+        from asr.model_manager import ensure_model_downloaded
 
-        log.info("Loading Sherpa-ONNX offline model: %s...", self.model_id)
+        log.info("Loading Alibaba SenseVoice offline model: %s...", self.model_id)
 
         if self.model_id == "sense-voice-small":
-            repo = "csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"
-            model_dir = huggingface_hub.snapshot_download(repo, allow_patterns=["*.onnx", "tokens.txt"])
+            model_dir = ensure_model_downloaded("sense-voice-small")
             model_file = os.path.join(model_dir, "model.int8.onnx" if os.path.exists(os.path.join(model_dir, "model.int8.onnx")) else "model.onnx")
             tokens_file = os.path.join(model_dir, "tokens.txt")
 
@@ -47,27 +46,8 @@ class SherpaOfflineEngine(ASREngine):
                 use_itn=True,
             )
             self._is_loaded = True
-
-        elif self.model_id.startswith("moonshine-"):
-            repo = f"csukuangfj/sherpa-onnx-{self.model_id}-en-int8"
-            model_dir = huggingface_hub.snapshot_download(repo, allow_patterns=["*.onnx", "tokens.txt"])
-            preprocess = os.path.join(model_dir, "preprocess.onnx")
-            encode = os.path.join(model_dir, "encode.int8.onnx")
-            uncached_decode = os.path.join(model_dir, "uncached_decode.int8.onnx")
-            cached_decode = os.path.join(model_dir, "cached_decode.int8.onnx")
-            tokens = os.path.join(model_dir, "tokens.txt")
-
-            self.recognizer = sherpa_onnx.OfflineRecognizer.from_moonshine(
-                preprocessor=preprocess,
-                encoder=encode,
-                uncached_decoder=uncached_decode,
-                cached_decoder=cached_decode,
-                tokens=tokens,
-                num_threads=self.num_threads,
-            )
-            self._is_loaded = True
         else:
-            raise ValueError(f"Unsupported offline model: {self.model_id}")
+            raise ValueError(f"Unsupported offline model: {self.model_id}. Only 'sense-voice-small' is supported.")
 
         log.info("Model %s loaded successfully", self.model_id)
 
@@ -83,8 +63,77 @@ class SherpaOfflineEngine(ASREngine):
         if audio.ndim > 1:
             audio = audio.flatten()
 
-        stream = self.recognizer.create_stream()
-        stream.accept_waveform(16000, audio)
-        self.recognizer.decode_stream(stream)
-        text = stream.result.text.strip()
-        return {"text": text, "language": "en"}
+        duration_sec = len(audio) / 16000.0
+
+        if duration_sec > 25.0:
+            log.info("Audio duration (%.1fs) exceeds 25s; chunking via VAD...", duration_sec)
+            
+            def _get_safe_segments(audio_seg: np.ndarray, offset: int = 0, min_silence: int = 500) -> list[dict]:
+                try:
+                    from faster_whisper.vad import get_speech_timestamps, VadOptions
+                    timestamps = get_speech_timestamps(
+                        audio_seg, 
+                        vad_options=VadOptions(
+                            min_silence_duration_ms=min_silence,
+                            speech_pad_ms=100
+                        ),
+                        sampling_rate=16000
+                    )
+                except Exception as e:
+                    log.warning("VAD chunking failed: %s", e)
+                    timestamps = []
+
+                if not timestamps:
+                    timestamps = [{"start": 0, "end": len(audio_seg)}]
+
+                max_samples = 25 * 16000
+                final_segments = []
+                for ts in timestamps:
+                    seg_len = ts["end"] - ts["start"]
+                    # If the segment is STILL too long and we can lower the silence threshold further:
+                    if seg_len > max_samples and min_silence >= 100:
+                        sub_segments = _get_safe_segments(
+                            audio_seg[ts["start"]:ts["end"]], 
+                            offset=0, 
+                            min_silence=max(50, min_silence // 2)
+                        )
+                        for sub_ts in sub_segments:
+                            final_segments.append({
+                                "start": offset + ts["start"] + sub_ts["start"],
+                                "end": offset + ts["start"] + sub_ts["end"]
+                            })
+                    elif seg_len > max_samples:
+                        # Reached minimum silence threshold, MUST mechanically split as last resort
+                        for j in range(0, seg_len, max_samples):
+                            final_segments.append({
+                                "start": offset + ts["start"] + j,
+                                "end": offset + min(ts["end"], ts["start"] + j + max_samples)
+                            })
+                    else:
+                        final_segments.append({
+                            "start": offset + ts["start"],
+                            "end": offset + ts["end"]
+                        })
+                return final_segments
+
+            safe_segments = _get_safe_segments(audio, 0, 500)
+            
+            results = []
+            for i, ts in enumerate(safe_segments):
+                segment = audio[ts["start"]:ts["end"]]
+                stream = self.recognizer.create_stream()
+                stream.accept_waveform(16000, segment)
+                self.recognizer.decode_stream(stream)
+                t = stream.result.text.strip()
+                if t:
+                    results.append(t)
+            
+            text = " ".join(results).strip()
+            return {"text": text, "language": "en"}
+        
+        else:
+            stream = self.recognizer.create_stream()
+            stream.accept_waveform(16000, audio)
+            self.recognizer.decode_stream(stream)
+            text = stream.result.text.strip()
+            return {"text": text, "language": "en"}

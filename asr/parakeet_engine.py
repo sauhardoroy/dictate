@@ -21,56 +21,126 @@ def get_models_dir() -> str:
 
 
 class ParakeetTDTEngine(ASREngine):
-    name = "parakeet-tdt"
+    name = "parakeet"
 
-    def __init__(self, num_threads: int = 4):
+    def __init__(self, num_threads: int = 4, hotwords_file: str = "hotwords.txt",
+                 hotwords_score: float = 2.0, device: str = "auto", language: str = "en", **kwargs):
         self.num_threads = num_threads or 4
+        self.hotwords_file = hotwords_file or "hotwords.txt"
+        self.hotwords_score = float(hotwords_score) if hotwords_score else 2.0
+        self.device = device or "auto"
+        self.language = language or "en"
         self.recognizer = None
         self._is_loaded = False
 
+    def _resolve_hotwords_file(self) -> str:
+        """Find valid hotwords.txt and prepare a sanitized version for Sherpa-ONNX."""
+        if not self.hotwords_file:
+            return ""
+        candidates = [
+            self.hotwords_file,
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), self.hotwords_file),
+            os.path.join(os.path.dirname(sys.executable), self.hotwords_file) if getattr(sys, "frozen", False) else "",
+        ]
+        raw_path = ""
+        for cand in candidates:
+            if cand and os.path.isfile(cand) and os.path.getsize(cand) > 0:
+                raw_path = os.path.abspath(cand)
+                break
+
+        if not raw_path:
+            return ""
+
+        # Prepare clean hotwords without punctuation / colons that fail token lookup
+        try:
+            import re
+            clean_lines = []
+            with open(raw_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    word = line.split(":", 1)[0].split("/", 1)[0].strip()
+                    word = re.sub(r"[^\w\s\-]", "", word).strip()
+                    if word:
+                        clean_lines.append(word.upper())
+
+            if clean_lines:
+                clean_path = os.path.join(os.path.dirname(raw_path), ".hotwords_sherpa.txt")
+                with open(clean_path, "w", encoding="utf-8") as f:
+                    f.write("\n".join(clean_lines) + "\n")
+                return clean_path
+        except Exception as e:
+            log.warning("Could not sanitize hotwords file: %s", e)
+
+        return raw_path
+
     def load(self):
-        """Load the Parakeet TDT INT8 ONNX model."""
+        """Load the Parakeet TDT INT8 ONNX model with Sherpa-ONNX."""
         import sherpa_onnx
-        import huggingface_hub
+        from asr.model_manager import ensure_model_downloaded
 
-        models_base = get_models_dir()
-        local_dir = os.path.join(models_base, "parakeet-tdt-0.6b-v3")
-
-        # Check if stored in local models folder or HF cache
-        if os.path.exists(os.path.join(local_dir, "encoder.int8.onnx")):
-            model_dir = local_dir
-        else:
-            log.info("Downloading/verifying Parakeet TDT 0.6B v3 from HuggingFace...")
-            model_dir = huggingface_hub.snapshot_download(
-                repo_id=HF_REPO_ID,
-                allow_patterns=["*.onnx", "tokens.txt"],
-            )
-
+        model_dir = ensure_model_downloaded("parakeet-tdt-0.6b-v3")
         encoder = os.path.join(model_dir, "encoder.int8.onnx")
         decoder = os.path.join(model_dir, "decoder.int8.onnx")
         joiner = os.path.join(model_dir, "joiner.int8.onnx")
         tokens = os.path.join(model_dir, "tokens.txt")
 
-        log.info("Initializing Parakeet TDT NeMo transducer...")
-        self.recognizer = sherpa_onnx.OfflineRecognizer.from_transducer(
-            encoder=encoder,
-            decoder=decoder,
-            joiner=joiner,
-            tokens=tokens,
-            num_threads=self.num_threads,
-            sample_rate=16000,
-            feature_dim=80,
-            decoding_method="greedy_search",
-            model_type="nemo_transducer",
-        )
+        hw_path = self._resolve_hotwords_file()
+        if hw_path:
+            log.info("Loading Parakeet TDT with hotwords phrase boosting from: %s (score=%.1f)", hw_path, self.hotwords_score)
+            decoding_method = "modified_beam_search"
+        else:
+            log.info("Loading Parakeet TDT with greedy search (no hotwords file)")
+            decoding_method = "greedy_search"
+
+        provider = "cpu"
+        # If cuda provider requested and supported by onnxruntime/sherpa-onnx
+        if self.device == "cuda":
+            provider = "cuda"
+
+        try:
+            self.recognizer = sherpa_onnx.OfflineRecognizer.from_transducer(
+                encoder=encoder,
+                decoder=decoder,
+                joiner=joiner,
+                tokens=tokens,
+                num_threads=self.num_threads,
+                sample_rate=16000,
+                feature_dim=80,
+                decoding_method=decoding_method,
+                model_type="nemo_transducer",
+                max_active_paths=4,
+                hotwords_file=hw_path,
+                hotwords_score=self.hotwords_score,
+                provider=provider,
+            )
+        except Exception as exc:
+            log.warning("Failed to initialize with provider=%s (%s), falling back to CPU", provider, exc)
+            self.recognizer = sherpa_onnx.OfflineRecognizer.from_transducer(
+                encoder=encoder,
+                decoder=decoder,
+                joiner=joiner,
+                tokens=tokens,
+                num_threads=self.num_threads,
+                sample_rate=16000,
+                feature_dim=80,
+                decoding_method=decoding_method,
+                model_type="nemo_transducer",
+                max_active_paths=4,
+                hotwords_file=hw_path,
+                hotwords_score=self.hotwords_score,
+                provider="cpu",
+            )
+
         self._is_loaded = True
-        log.info("Parakeet TDT engine ready")
+        log.info("Parakeet TDT engine ready (hotwords=%s)", bool(hw_path))
 
     def is_loaded(self) -> bool:
         return self._is_loaded and self.recognizer is not None
 
     def transcribe(self, audio: np.ndarray, fast: bool = False) -> dict:
-        """Transcribe 16kHz float32 audio."""
+        """Transcribe 16kHz float32 audio with adaptive VAD chunking for long audio."""
         if not self.is_loaded():
             raise RuntimeError("Parakeet TDT model is not loaded")
 
@@ -79,8 +149,83 @@ class ParakeetTDTEngine(ASREngine):
         if audio.ndim > 1:
             audio = audio.flatten()
 
-        stream = self.recognizer.create_stream()
-        stream.accept_waveform(16000, audio)
-        self.recognizer.decode_stream(stream)
-        text = stream.result.text.strip()
-        return {"text": text, "language": "en"}
+        duration_sec = len(audio) / 16000.0
+
+        if duration_sec > 20.0 and not fast:
+            log.info("Parakeet audio duration (%.1fs) exceeds 20s; chunking via VAD...", duration_sec)
+
+            def _get_safe_segments(audio_seg: np.ndarray, offset: int = 0, min_silence: int = 500) -> list[dict]:
+                try:
+                    from faster_whisper.vad import get_speech_timestamps, VadOptions
+                    timestamps = get_speech_timestamps(
+                        audio_seg,
+                        vad_options=VadOptions(
+                            min_silence_duration_ms=min_silence,
+                            speech_pad_ms=100
+                        ),
+                        sampling_rate=16000
+                    )
+                except Exception as e:
+                    log.warning("VAD chunking failed: %s", e)
+                    timestamps = []
+
+                if not timestamps:
+                    timestamps = [{"start": 0, "end": len(audio_seg)}]
+
+                max_samples = 20 * 16000
+                final_segments = []
+                for ts in timestamps:
+                    seg_len = ts["end"] - ts["start"]
+                    if seg_len > max_samples and min_silence >= 100:
+                        sub_segments = _get_safe_segments(
+                            audio_seg[ts["start"]:ts["end"]],
+                            offset=0,
+                            min_silence=max(50, min_silence // 2)
+                        )
+                        for sub_ts in sub_segments:
+                            final_segments.append({
+                                "start": offset + ts["start"] + sub_ts["start"],
+                                "end": offset + ts["start"] + sub_ts["end"]
+                            })
+                    elif seg_len > max_samples:
+                        for j in range(0, seg_len, max_samples):
+                            final_segments.append({
+                                "start": offset + ts["start"] + j,
+                                "end": offset + min(ts["end"], ts["start"] + j + max_samples)
+                            })
+                    else:
+                        final_segments.append({
+                            "start": offset + ts["start"],
+                            "end": offset + ts["end"]
+                        })
+                return final_segments
+
+            safe_segments = _get_safe_segments(audio, 0, 500)
+
+            results = []
+            for ts in safe_segments:
+                segment = audio[ts["start"]:ts["end"]]
+                if len(segment) < 800:
+                    continue
+                stream = self.recognizer.create_stream()
+                stream.accept_waveform(16000, segment)
+                self.recognizer.decode_stream(stream)
+                t = stream.result.text.strip()
+                if t:
+                    results.append(t)
+
+            text = " ".join(results).strip()
+            return {"text": text, "language": "en"}
+
+        else:
+            stream = self.recognizer.create_stream()
+            stream.accept_waveform(16000, audio)
+            self.recognizer.decode_stream(stream)
+            text = stream.result.text.strip()
+            return {"text": text, "language": "en"}
+
+
+# Alias for backward compatibility
+ParakeetEngine = ParakeetTDTEngine
+
+

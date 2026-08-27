@@ -44,6 +44,47 @@ def model_loading_message(model_size: str) -> str:
     return f"Downloading {model_size} model (first run only)…"
 
 
+def _setup_cuda_dlls():
+    """Ensure Windows locates NVIDIA CUDA / cuDNN DLLs from installed pip packages, frozen bundle, or CUDA Toolkit."""
+    if sys.platform != "win32":
+        return
+
+    dll_dirs = []
+
+    # 1. If running as a frozen PyInstaller application
+    if getattr(sys, "frozen", False):
+        exe_dir = os.path.dirname(sys.executable)
+        for cand in [exe_dir, os.path.join(exe_dir, "_internal"), getattr(sys, "_MEIPASS", "")]:
+            if cand and os.path.isdir(cand) and cand not in dll_dirs:
+                dll_dirs.append(cand)
+
+    # 2. Installed python nvidia packages in virtualenv/site-packages
+    for pkg in ("nvidia.cublas", "nvidia.cudnn", "nvidia.cuda_nvrtc", "nvidia.cuda_runtime"):
+        try:
+            mod = __import__(pkg, fromlist=["__path__"])
+            for p in getattr(mod, "__path__", []):
+                bin_dir = os.path.join(p, "bin")
+                if os.path.isdir(bin_dir) and bin_dir not in dll_dirs:
+                    dll_dirs.append(bin_dir)
+        except ImportError:
+            pass
+
+    # 3. System CUDA_PATH if defined
+    cuda_path = os.environ.get("CUDA_PATH")
+    if cuda_path:
+        bin_dir = os.path.join(cuda_path, "bin")
+        if os.path.isdir(bin_dir) and bin_dir not in dll_dirs:
+            dll_dirs.append(bin_dir)
+
+    for d in dll_dirs:
+        try:
+            os.add_dll_directory(d)
+        except Exception:
+            pass
+        if d not in os.environ.get("PATH", ""):
+            os.environ["PATH"] = d + os.pathsep + os.environ.get("PATH", "")
+
+
 class FasterWhisperEngine(ASREngine):
     name = "faster-whisper"
 
@@ -61,6 +102,7 @@ class FasterWhisperEngine(ASREngine):
         self.model = None
 
     def load(self):
+        _setup_cuda_dlls()
         from faster_whisper import WhisperModel  # deferred: heavy import
         resolved_model = resolve_model_path(self.model_size)
         log.info(
@@ -68,18 +110,33 @@ class FasterWhisperEngine(ASREngine):
             self.model_size, self.device, self.compute_type,
             self.cpu_threads or "auto", resolved_model,
         )
-        # device="auto"/compute_type="auto" let CTranslate2 pick the fastest
-        # backend actually available on this machine (CUDA GPU when present,
-        # otherwise the best CPU kernel for the current weights) instead of
-        # hardcoding a CPU-only assumption. cpu_threads=0 similarly lets
-        # CTranslate2 auto-size the OpenMP thread pool for the host CPU.
-        self.model = WhisperModel(
-            resolved_model,
-            device=self.device,
-            compute_type=self.compute_type,
-            cpu_threads=self.cpu_threads,
-        )
-        log.info("faster-whisper model %r ready (device=%s)", self.model_size, self.device)
+        try:
+            self.model = WhisperModel(
+                resolved_model,
+                device=self.device,
+                compute_type=self.compute_type,
+                cpu_threads=self.cpu_threads,
+            )
+            log.info("faster-whisper model %r ready (device=%s)", self.model_size, self.device)
+        except Exception as exc:
+            # If CUDA or auto-detection failed on a machine without a compatible NVIDIA GPU,
+            # fall back gracefully to CPU so the app never crashes.
+            if self.device in ("cuda", "auto"):
+                log.warning(
+                    "Failed to initialize faster-whisper on device=%s (%s); falling back to CPU",
+                    self.device, exc,
+                )
+                self.device = "cpu"
+                self.compute_type = "auto"
+                self.model = WhisperModel(
+                    resolved_model,
+                    device="cpu",
+                    compute_type="auto",
+                    cpu_threads=self.cpu_threads,
+                )
+                log.info("faster-whisper model %r ready on CPU fallback", self.model_size)
+            else:
+                raise
 
     def is_loaded(self) -> bool:
         return self.model is not None

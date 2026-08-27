@@ -1,14 +1,16 @@
-"""Text injection: robust Windows clipboard set -> Ctrl+V -> optional restore."""
-import ctypes
-from ctypes import wintypes
+"""Text injection: robust Windows/macOS clipboard set -> Ctrl+V/Cmd+V -> optional restore."""
+import os
+import sys
 import threading
 import time
-
 import pyperclip
 
 from log import get_logger
 
 log = get_logger(__name__)
+
+user32 = None
+kernel32 = None
 
 # Win32 API constants & setup
 CF_UNICODETEXT = 13
@@ -16,48 +18,58 @@ GMEM_MOVEABLE = 0x0002
 GMEM_ZEROINIT = 0x0040
 GHND = GMEM_MOVEABLE | GMEM_ZEROINIT
 
-user32 = ctypes.windll.user32
-kernel32 = ctypes.windll.kernel32
+if sys.platform == "win32":
+    try:
+        import ctypes
+        from ctypes import wintypes
 
-user32.OpenClipboard.argtypes = [wintypes.HWND]
-user32.OpenClipboard.restype = wintypes.BOOL
-user32.CloseClipboard.argtypes = []
-user32.CloseClipboard.restype = wintypes.BOOL
-user32.EmptyClipboard.argtypes = []
-user32.EmptyClipboard.restype = wintypes.BOOL
-user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
-user32.SetClipboardData.restype = wintypes.HANDLE
-user32.GetClipboardData.argtypes = [wintypes.UINT]
-user32.GetClipboardData.restype = wintypes.HANDLE
-user32.IsClipboardFormatAvailable.argtypes = [wintypes.UINT]
-user32.IsClipboardFormatAvailable.restype = wintypes.BOOL
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
 
-user32.GetForegroundWindow.argtypes = []
-user32.GetForegroundWindow.restype = wintypes.HWND
-user32.SetForegroundWindow.argtypes = [wintypes.HWND]
-user32.SetForegroundWindow.restype = wintypes.BOOL
-user32.IsWindow.argtypes = [wintypes.HWND]
-user32.IsWindow.restype = wintypes.BOOL
-user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
-user32.GetWindowThreadProcessId.restype = wintypes.DWORD
-user32.AttachThreadInput.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.BOOL]
-user32.AttachThreadInput.restype = wintypes.BOOL
-user32.BringWindowToTop.argtypes = [wintypes.HWND]
-user32.BringWindowToTop.restype = wintypes.BOOL
+        user32.OpenClipboard.argtypes = [wintypes.HWND]
+        user32.OpenClipboard.restype = wintypes.BOOL
+        user32.CloseClipboard.argtypes = []
+        user32.CloseClipboard.restype = wintypes.BOOL
+        user32.EmptyClipboard.argtypes = []
+        user32.EmptyClipboard.restype = wintypes.BOOL
+        user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
+        user32.SetClipboardData.restype = wintypes.HANDLE
+        user32.GetClipboardData.argtypes = [wintypes.UINT]
+        user32.GetClipboardData.restype = wintypes.HANDLE
+        user32.IsClipboardFormatAvailable.argtypes = [wintypes.UINT]
+        user32.IsClipboardFormatAvailable.restype = wintypes.BOOL
 
-kernel32.GetCurrentThreadId.argtypes = []
-kernel32.GetCurrentThreadId.restype = wintypes.DWORD
-kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
-kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
-kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
-kernel32.GlobalLock.restype = wintypes.LPVOID
-kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
-kernel32.GlobalUnlock.restype = wintypes.BOOL
+        user32.GetForegroundWindow.argtypes = []
+        user32.GetForegroundWindow.restype = wintypes.HWND
+        user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+        user32.SetForegroundWindow.restype = wintypes.BOOL
+        user32.IsWindow.argtypes = [wintypes.HWND]
+        user32.IsWindow.restype = wintypes.BOOL
+        user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+        user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+        user32.AttachThreadInput.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.BOOL]
+        user32.AttachThreadInput.restype = wintypes.BOOL
+        user32.BringWindowToTop.argtypes = [wintypes.HWND]
+        user32.BringWindowToTop.restype = wintypes.BOOL
+
+        kernel32.GetCurrentThreadId.argtypes = []
+        kernel32.GetCurrentThreadId.restype = wintypes.DWORD
+        kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
+        kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
+        kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
+        kernel32.GlobalLock.restype = wintypes.LPVOID
+        kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+        kernel32.GlobalUnlock.restype = wintypes.BOOL
+    except Exception as exc:
+        log.warning("Win32 API bindings could not be initialized: %s", exc)
+        user32 = None
+        kernel32 = None
 
 
 def activate_window(hwnd: int) -> bool:
     """Safely restore foreground focus to the given HWND using Win32 API."""
-    if not hwnd or not user32.IsWindow(hwnd):
+    if not hwnd or not user32 or not user32.IsWindow(hwnd):
+
         return False
     cur_fg = user32.GetForegroundWindow()
     if cur_fg == hwnd:
@@ -260,30 +272,32 @@ _restore_timer = None  # Track in-flight clipboard restore timer
 
 
 def paste_text(text: str, restore: bool = False, delay_ms: int = 150, target_hwnd: int = 0) -> bool:
-    """Paste ``text`` into the captured target window.
+    """Paste ``text`` into the captured target window and retain text on clipboard.
 
-    Returns ``True`` when an injection was sent. If a captured window cannot
-    be restored, returns ``False`` rather than risking a paste into a different
-    application that happened to receive foreground focus.
+    Always places transcribed text on the Windows clipboard first so that
+    even if the cursor is not in an active text box, the dictated words are
+    never lost and can be pasted anywhere using Ctrl+V.
     """
     global _restore_timer
 
     if not text:
         return False
 
-    # Restore the text field the user was working in before recording. This is
-    # deliberately fail-closed: protecting the destination is more important
-    # than inserting a transcript somewhere unintended.
-    if target_hwnd and not activate_window(target_hwnd):
-        log.warning("paste aborted: unable to activate target hwnd=%s", target_hwnd)
-        return False
+    # 1. Place text on clipboard immediately so it is never lost
+    copied = copy_to_clipboard(text)
 
-    # Cancel any pending clipboard restore from a previous paste to prevent
-    # out-of-order overwrites during rapid back-to-back dictations.
+    # Cancel any pending clipboard restore timer from a previous paste
     if _restore_timer is not None:
         if hasattr(_restore_timer, 'cancel'):
             _restore_timer.cancel()
         _restore_timer = None
+
+    # Fail-closed focus check: if target window cannot be activated, we don't
+    # send blind Ctrl+V to an unintended foreground application, but the text
+    # is safely preserved in the clipboard for manual pasting.
+    if target_hwnd and not activate_window(target_hwnd):
+        log.warning("target hwnd=%s could not be activated; text retained on clipboard", target_hwnd)
+        return True
 
     backup = None
     have_backup = False
@@ -294,10 +308,15 @@ def paste_text(text: str, restore: bool = False, delay_ms: int = 150, target_hwn
         except Exception:
             pass
 
-    # 1. Place text on clipboard
-    copied = copy_to_clipboard(text)
-
     # 2. Trigger paste in active window natively
+    if sys.platform == "darwin":
+        try:
+            os.system('''osascript -e 'tell application "System Events" to keystroke "v" using command down' ''')
+            log.debug("pasted via Cmd+V on macOS (%d chars)", len(text))
+        except Exception as e:
+            log.warning("macOS AppleScript Cmd+V failed: %s", e)
+        return True
+
     if copied:
         _send_ctrl_v()
         log.debug("pasted via Ctrl+V (%d chars)%s", len(text),
@@ -315,4 +334,5 @@ def paste_text(text: str, restore: bool = False, delay_ms: int = 150, target_hwn
         _restore_timer.start()
 
     return True
+
 
