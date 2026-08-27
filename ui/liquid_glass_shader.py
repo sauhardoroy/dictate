@@ -3,9 +3,14 @@
 ==============================================================================
 OPTICAL PHYSICS & MATERIAL SHADER PIPELINE (Apple Human Interface Guidelines)
 ==============================================================================
+Implements:
+- Snell's Law refraction across 3 chromatic channels (subtle Cauchy dispersion)
+- Edge lensing with 1px inner specular rim highlight
+- Screen-center vector tracking for adaptive Blinn-Phong key light highlights
+- Concentric corner radius geometry precomputation
+- Performance-budgeted caching & reduced-transparency / reduced-motion fallbacks
 """
 import math
-import time
 import numpy as np
 
 from PyQt6.QtCore import Qt, QPointF, QRectF
@@ -18,13 +23,13 @@ from ui import theme
 # ----------------------------------------------------------------------------
 IOR_LIQUID = theme.GLASS_IOR
 DISPERSION_STRENGTH = theme.GLASS_DISPERSION
-LENS_THICKNESS = 3.5
+LENS_THICKNESS = 2.8
 
 # ----------------------------------------------------------------------------
 # 2. SPECULAR REFLECTION & LIGHTING MODEL (Blinn-Phong)
 # ----------------------------------------------------------------------------
-SPECULAR_KEY_INTENSITY_DARK = 220.0   # Brightness of the crisp glint (0.0 to 255.0)
-SPECULAR_KEY_INTENSITY_LIGHT = 190.0  # Brightness on light theme (0.0 to 255.0)
+SPECULAR_KEY_INTENSITY_DARK = 210.0   # Crisp glint on dark theme (0.0 to 255.0)
+SPECULAR_KEY_INTENSITY_LIGHT = 180.0  # Crisp glint on light theme (0.0 to 255.0)
 SPECULAR_KEY_SHININESS = theme.GLASS_SPECULAR_POW
 
 SPECULAR_FILL_INTENSITY_DARK = 0.0
@@ -35,17 +40,17 @@ FRESNEL_F0 = 0.000
 FRESNEL_POWER = theme.GLASS_FRESNEL_POW
 
 # ----------------------------------------------------------------------------
-# 3. ORGANIC FLUID UNDULATION & SURFACE WAVES
+# 3. INTERACTIVE FLUID UNDULATION & SURFACE WAVES
 # ----------------------------------------------------------------------------
-RIPPLE_AMPLITUDE = 0.010
-RIPPLE_SPEED = 2.4
+RIPPLE_AMPLITUDE = 0.008
+RIPPLE_SPEED = 2.0
 
-EDGE_FEATHER = 0.20
+EDGE_FEATHER = 0.18
 
 # ----------------------------------------------------------------------------
 # 4. LIGHT SOURCE VECTORS & SCREEN-CENTER POSITIONAL TRACKING
 # ----------------------------------------------------------------------------
-KEY_LIGHT_Z = 0.10
+KEY_LIGHT_Z = 0.12
 
 DEFAULT_KEY_LIGHT = np.array([-0.35, -0.65, KEY_LIGHT_Z], dtype=np.float32)
 DEFAULT_KEY_LIGHT /= np.linalg.norm(DEFAULT_KEY_LIGHT)
@@ -60,7 +65,7 @@ HALF_FILL /= np.linalg.norm(HALF_FILL)
 
 
 def _bilinear_sample_2d(channel_2d: np.ndarray, fx: np.ndarray, fy: np.ndarray, w: int, h: int) -> np.ndarray:
-    """High-Definition Bilinear Subpixel Sampling for continuous, silky-smooth optical refraction."""
+    """High-Definition Bilinear Subpixel Sampling for continuous optical refraction."""
     fx_c = np.clip(fx, 0.0, float(w - 1.001))
     fy_c = np.clip(fy, 0.0, float(h - 1.001))
 
@@ -78,7 +83,7 @@ def _bilinear_sample_2d(channel_2d: np.ndarray, fx: np.ndarray, fy: np.ndarray, 
 
 
 class LiquidGlassShader:
-    """High-performance vectorized shader engine for real-time liquid glass rendering with HD supersampling."""
+    """High-performance vectorized shader engine for real-time liquid glass rendering."""
 
     def __init__(self):
         self._cached_w = 0
@@ -131,14 +136,31 @@ class LiquidGlassShader:
                screen_center_delta: tuple[float, float] = None,
                supersample_factor: int = 2,
                corner_radius: float = None,
-               black_tint: float = 0.0) -> QImage:
-        """Executes Pass 2: High-Definition Fragment shader evaluation over screen backdrop buffer."""
+               black_tint: float = 0.0,
+               reduced_transparency: bool = False) -> QImage:
+        """Executes Pass 2: Fragment shader evaluation over screen backdrop buffer."""
         if w <= 4 or h <= 4:
             return QImage()
 
         scale = max(1, supersample_factor)
         render_w = int(w * scale)
         render_h = int(h * scale)
+
+        # Reduced transparency fallback: solid elevated material with clean border
+        if reduced_transparency:
+            fallback_img = QImage(render_w, render_h, QImage.Format.Format_ARGB32_Premultiplied)
+            fallback_img.fill(Qt.GlobalColor.transparent)
+            p = QPainter(fallback_img)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            r = (corner_radius or min(w/2, h/2)) * scale
+            rect = QRectF(1.0, 1.0, render_w - 2.0, render_h - 2.0)
+            fill_color = QColor(theme.SURFACE_OPAQUE_FALLBACK_DARK if dark else theme.SURFACE_OPAQUE_FALLBACK_LIGHT)
+            p.setBrush(fill_color)
+            p.setPen(QPen(QColor(255, 255, 255, 40) if dark else QColor(0, 0, 0, 30), 1.5 * scale))
+            p.drawRoundedRect(rect, r, r)
+            p.end()
+            fallback_img.setDevicePixelRatio(scale)
+            return fallback_img
 
         # Step 1: Backdrop texture buffer extraction
         if backdrop is None or backdrop.isNull():
@@ -166,8 +188,11 @@ class LiquidGlassShader:
         scaled_r = corner_radius * scale if corner_radius is not None else None
         x_idx, y_idx, u, edge_alpha, z0, grad_x, grad_y, radius = self._build_geometry_grid(render_w, render_h, scaled_r)
 
-        ripple = RIPPLE_AMPLITUDE * np.sin((x_idx / scale) * 0.16 + ripple_phase) * np.cos((y_idx / scale) * 0.20 + ripple_phase * 0.7) * (1.0 - np.clip(u, 0, 1)**2)
-        z = np.clip(z0 + ripple, 0.0, 1.0)
+        if ripple_phase != 0.0:
+            ripple = RIPPLE_AMPLITUDE * np.sin((x_idx / scale) * 0.16 + ripple_phase) * np.cos((y_idx / scale) * 0.20 + ripple_phase * 0.7) * (1.0 - np.clip(u, 0, 1)**2)
+            z = np.clip(z0 + ripple, 0.0, 1.0)
+        else:
+            z = z0
 
         dz_du = np.where(z0 > 1e-4, u / np.maximum(z0, 0.1), 0.0)
         nx = grad_x * dz_du
@@ -189,8 +214,8 @@ class LiquidGlassShader:
             disp_y = -ny * (1.0 - eta_inv) * thickness
             return x_idx + disp_x, y_idx + disp_y
 
-        ior_red = IOR_LIQUID - (0.015 * DISPERSION_STRENGTH)
-        ior_blue = IOR_LIQUID + (0.015 * DISPERSION_STRENGTH)
+        ior_red = IOR_LIQUID - (0.010 * DISPERSION_STRENGTH)
+        ior_blue = IOR_LIQUID + (0.010 * DISPERSION_STRENGTH)
 
         rx, ry = compute_channel_coords(ior_red)
         gx, gy = compute_channel_coords(IOR_LIQUID)
@@ -231,9 +256,9 @@ class LiquidGlassShader:
         fresnel = FRESNEL_F0 + (1.0 - FRESNEL_F0) * ((1.0 - nz)**FRESNEL_POWER)
 
         # Step 6: Final Composite with Premultiplied Alpha
-        out_r = refracted_r * (1.0 - fresnel * 0.1) + spec_key + spec_fill * 0.3 + (fresnel * 40.0)
-        out_g = refracted_g * (1.0 - fresnel * 0.1) + spec_key + spec_fill * 0.3 + (fresnel * 40.0)
-        out_b = refracted_b * (1.0 - fresnel * 0.1) + spec_key + spec_fill * 0.4 + (fresnel * 55.0)
+        out_r = refracted_r * (1.0 - fresnel * 0.08) + spec_key + spec_fill * 0.2 + (fresnel * 35.0)
+        out_g = refracted_g * (1.0 - fresnel * 0.08) + spec_key + spec_fill * 0.2 + (fresnel * 35.0)
+        out_b = refracted_b * (1.0 - fresnel * 0.08) + spec_key + spec_fill * 0.3 + (fresnel * 48.0)
 
         if accent_color:
             t_r, t_g, t_b = accent_color.red(), accent_color.green(), accent_color.blue()
@@ -243,9 +268,9 @@ class LiquidGlassShader:
             out_b = out_b * (1.0 - tint_fac) + t_b * tint_fac
 
         if black_tint > 0.0:
-            smoke_r = 10.0
-            smoke_g = 12.0
-            smoke_b = 18.0
+            smoke_r = 12.0
+            smoke_g = 15.0
+            smoke_b = 22.0
             b_fac = np.clip(black_tint, 0.0, 1.0)
             out_r = out_r * (1.0 - b_fac * 0.50) + smoke_r * (b_fac * 0.50)
             out_g = out_g * (1.0 - b_fac * 0.50) + smoke_g * (b_fac * 0.50)

@@ -36,29 +36,29 @@ def create_rich_backdrop(w: int, h: int, dark: bool) -> QPixmap:
 
     # High-contrast geometric shapes and text to verify Snell's law refraction & chromatic dispersion
     for i in range(len(STATES)):
-        cx = i * 160 + 80
+        cx = i * 340 + 170
         p.setPen(Qt.PenStyle.NoPen)
         if dark:
             p.setBrush(QColor("#1E293B"))
-            p.drawEllipse(cx - 36, 12, 72, 46)
-            p.setBrush(QColor("#38BDF8" if i % 2 == 0 else "#F43F5E"))
-            p.drawRect(cx - 24, 28, 48, 14)
+            p.drawEllipse(cx - 48, 16, 96, 60)
+            p.setBrush(QColor("#38BDF8" if i % 2 == 0 else "#FB7185"))
+            p.drawRect(cx - 32, 38, 64, 18)
         else:
             p.setBrush(QColor("#CBD5E1"))
-            p.drawEllipse(cx - 36, 12, 72, 46)
+            p.drawEllipse(cx - 48, 16, 96, 60)
             p.setBrush(QColor("#0284C7" if i % 2 == 0 else "#E11D48"))
-            p.drawRect(cx - 24, 28, 48, 14)
+            p.drawRect(cx - 32, 38, 64, 18)
 
         p.setPen(QColor("#94A3B8" if dark else "#64748B"))
-        p.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
-        p.drawText(cx - 25, 62, STATES[i].upper())
+        p.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+        p.drawText(cx - 35, 84, STATES[i].upper())
 
     p.end()
     return pm
 
 
 def render_row(dark: bool, filename: str):
-    cell_w, cell_h = 160, 70
+    cell_w, cell_h = 340, 100
     total_w = cell_w * len(STATES)
 
     sheet = create_rich_backdrop(total_w, cell_h, dark)
@@ -70,10 +70,13 @@ def render_row(dark: bool, filename: str):
 
     for i, state in enumerate(STATES):
         pill.set_state(state, "")
+        if state == "recording":
+            pill.update_preview("Redesigning Dictate with Liquid Glass")
         pill._morph_anim.stop()
         w = theme.STATES[state].width
-        h = theme.PILL_HEIGHT
+        h = theme.STATES[state].height
         pill._width = float(w)
+        pill._height = float(h)
         pill.resize(w, h)
         pill._pulse = 0.85
         pill._ripple_phase = 0.5

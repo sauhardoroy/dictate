@@ -5,6 +5,7 @@ the active (latest) word is highlighted, while previous words gently fade.
 """
 import ctypes
 from ctypes import wintypes
+import sys
 
 from PyQt6.QtCore import (
     QEasingCurve,
@@ -27,7 +28,6 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import QApplication, QWidget
 
 from ui import theme
-import sys
 from ui.pill import _is_windows_dark_mode
 
 GWL_EXSTYLE = -20
@@ -55,7 +55,6 @@ if sys.platform == "win32":
         user32 = None
 
 
-
 class PreviewOverlay(QWidget):
     OVERLAY_WIDTH = 300
     OVERLAY_HEIGHT = 34
@@ -80,12 +79,10 @@ class PreviewOverlay(QWidget):
         self._target_pos = None
         self._is_showing = False
 
-        # Strictly the active sliding window of up to 4 words
         self._display_words: list[str] = []
 
         self.setFixedSize(self.OVERLAY_WIDTH, self.OVERLAY_HEIGHT)
 
-        # Entrance / Exit Animation
         self._fade_anim = QVariantAnimation(self)
         self._fade_anim.valueChanged.connect(self._on_fade_value)
         self._fade_anim.finished.connect(self._on_fade_finished)
@@ -117,7 +114,6 @@ class PreviewOverlay(QWidget):
         if not raw_words:
             return
 
-        # Take strictly the last up to 4 words being spoken
         new_window = raw_words[-self.MAX_VISIBLE_WORDS:]
         if new_window == self._display_words and self._is_showing:
             return
@@ -162,7 +158,7 @@ class PreviewOverlay(QWidget):
         self.show()
         self._apply_native_flags()
 
-        self._fade_anim.setDuration(160)
+        self._fade_anim.setDuration(theme.DURATION_CROSSFADE)
         self._fade_anim.setStartValue(self._opacity)
         self._fade_anim.setEndValue(1.0)
         self._fade_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
@@ -173,7 +169,7 @@ class PreviewOverlay(QWidget):
             return
         self._is_showing = False
         self._fade_anim.stop()
-        self._fade_anim.setDuration(140)
+        self._fade_anim.setDuration(theme.DURATION_FEEDBACK)
         self._fade_anim.setStartValue(self._opacity)
         self._fade_anim.setEndValue(0.0)
         self._fade_anim.setEasingCurve(QEasingCurve.Type.InCubic)
@@ -204,7 +200,7 @@ class PreviewOverlay(QWidget):
         path = QPainterPath()
         path.addRoundedRect(rect, r, r)
 
-        # Background Frosted Glass
+        # Background Translucent Surface
         if self._dark:
             bg_color = QColor(15, 23, 42, int(225 * self._opacity))
             border_color = QColor(255, 255, 255, int(28 * self._opacity))
@@ -216,11 +212,10 @@ class PreviewOverlay(QWidget):
             dot_color = QColor(190, 18, 60, int(220 * self._opacity))
             active_glow = QColor(190, 18, 60, int(35 * self._opacity))
 
-        # Fill capsule background & border
         p.fillPath(path, bg_color)
         p.strokePath(path, QPen(border_color, 1.0))
 
-        # Left mic indicator dot (pulsing recording accent)
+        # Left mic indicator dot
         dot_cx = 15.0
         dot_cy = h / 2.0
         p.setPen(Qt.PenStyle.NoPen)
@@ -232,15 +227,11 @@ class PreviewOverlay(QWidget):
         num_words = len(words)
 
         font_normal = theme.get_font(10, QFont.Weight.Normal)
-        font_normal.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
-
         font_active = theme.get_font(10, QFont.Weight.DemiBold)
-        font_active.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
 
         fm_normal = QFontMetrics(font_normal)
         fm_active = QFontMetrics(font_active)
 
-        # Calculate widths of words
         word_widths = []
         for i, word in enumerate(words):
             is_latest = (i == num_words - 1)
@@ -248,7 +239,6 @@ class PreviewOverlay(QWidget):
             word_widths.append(fm.horizontalAdvance(word))
 
         space_w = 6.0
-        total_text_w = sum(word_widths) + max(0, num_words - 1) * space_w
         start_x = 26.0
 
         cur_x = start_x
@@ -256,39 +246,21 @@ class PreviewOverlay(QWidget):
             dist_from_latest = num_words - 1 - i
             is_latest = (dist_from_latest == 0)
 
-            # Opacity and styling hierarchy
             if is_latest:
-                # Active word: Bright, bold, highlighted
-                if self._dark:
-                    word_color = QColor(255, 255, 255, int(255 * self._opacity))
-                else:
-                    word_color = QColor(15, 23, 42, int(255 * self._opacity))
+                word_color = QColor(255, 255, 255, int(255 * self._opacity)) if self._dark else QColor(15, 23, 42, int(255 * self._opacity))
                 p.setFont(font_active)
             elif dist_from_latest == 1:
-                # 1 word ago: Medium
-                if self._dark:
-                    word_color = QColor(203, 213, 225, int(190 * self._opacity))
-                else:
-                    word_color = QColor(71, 85, 105, int(190 * self._opacity))
+                word_color = QColor(203, 213, 225, int(190 * self._opacity)) if self._dark else QColor(71, 85, 105, int(190 * self._opacity))
                 p.setFont(font_normal)
             elif dist_from_latest == 2:
-                # 2 words ago: Soft fade
-                if self._dark:
-                    word_color = QColor(148, 163, 184, int(130 * self._opacity))
-                else:
-                    word_color = QColor(100, 116, 139, int(130 * self._opacity))
+                word_color = QColor(148, 163, 184, int(130 * self._opacity)) if self._dark else QColor(100, 116, 139, int(130 * self._opacity))
                 p.setFont(font_normal)
             else:
-                # 3 words ago: Deep fade
-                if self._dark:
-                    word_color = QColor(100, 116, 139, int(80 * self._opacity))
-                else:
-                    word_color = QColor(148, 163, 184, int(80 * self._opacity))
+                word_color = QColor(100, 116, 139, int(80 * self._opacity)) if self._dark else QColor(148, 163, 184, int(80 * self._opacity))
                 p.setFont(font_normal)
 
             ww = word_widths[i]
 
-            # Active word subtle focus pill
             if is_latest and self._opacity > 0.1:
                 pill_pad_x = 4.0
                 pill_rect = QRectF(cur_x - pill_pad_x, (h - 20.0) / 2.0, ww + pill_pad_x * 2, 20.0)

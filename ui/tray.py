@@ -1,4 +1,4 @@
-"""System tray icon with modern styling and state badges."""
+"""System tray icon with monochrome styling and status badges."""
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QAction, QColor, QIcon, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
@@ -6,22 +6,31 @@ from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
 from ui import theme
 
 
-def draw_icon(hex_color: str) -> QIcon:
+def draw_icon(badge_color: str = None) -> QIcon:
+    """Draw a clean monochrome microphone tray icon with optional status badge."""
     pm = QPixmap(64, 64)
     pm.fill(Qt.GlobalColor.transparent)
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    p.setPen(Qt.PenStyle.NoPen)
-    p.setBrush(QColor(hex_color))
-    p.drawEllipse(4, 4, 56, 56)
 
-    # Microphone icon glyph in white
-    p.setPen(QPen(QColor("#FFFFFF"), 3.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    # Base microphone glyph in crisp white/light-gray
+    p.setPen(QPen(QColor("#F8FAFC"), 3.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
     p.setBrush(Qt.BrushStyle.NoBrush)
-    p.drawRoundedRect(27, 16, 10, 18, 5, 5)
-    p.drawArc(21, 23, 22, 16, 180 * 16, 180 * 16)
-    p.drawLine(32, 39, 32, 45)
-    p.drawLine(26, 45, 38, 45)
+
+    # Mic body
+    p.drawRoundedRect(26, 14, 12, 22, 6, 6)
+    # Mic arc
+    p.drawArc(18, 22, 28, 20, 180 * 16, 180 * 16)
+    # Stem & base
+    p.drawLine(32, 42, 32, 49)
+    p.drawLine(24, 49, 40, 49)
+
+    # Status badge (if active state)
+    if badge_color:
+        p.setPen(QPen(QColor("#0F172A"), 1.8))
+        p.setBrush(QColor(badge_color))
+        p.drawEllipse(44, 10, 14, 14)
+
     p.end()
     return QIcon(pm)
 
@@ -34,16 +43,16 @@ class TrayIcon(QSystemTrayIcon):
     quit_requested = pyqtSignal()
 
     def __init__(self):
-        super().__init__(draw_icon("#38BDF8"))
+        super().__init__(draw_icon())
         self.setToolTip("Dictate — Ready")
 
         menu = QMenu()
         menu.setStyleSheet(theme.get_dialog_stylesheet(dark=True))
 
-        self.act_record = QAction("Start Listening", self)
+        self.act_record = QAction("Start Dictation", self)
         self.act_record.triggered.connect(self.toggle_requested.emit)
-        act_copy_last = QAction("Copy Last Transcript", self)
-        act_copy_last.triggered.connect(self.copy_last_requested.emit)
+        self.act_copy_last = QAction("Copy Last Transcript", self)
+        self.act_copy_last.triggered.connect(self.copy_last_requested.emit)
         act_history = QAction("Transcript History…", self)
         act_history.triggered.connect(self.history_requested.emit)
         act_settings = QAction("Settings…", self)
@@ -53,7 +62,7 @@ class TrayIcon(QSystemTrayIcon):
 
         menu.addAction(self.act_record)
         menu.addSeparator()
-        menu.addAction(act_copy_last)
+        menu.addAction(self.act_copy_last)
         menu.addAction(act_history)
         menu.addSeparator()
         menu.addAction(act_settings)
@@ -72,24 +81,34 @@ class TrayIcon(QSystemTrayIcon):
             pass
 
     def set_status(self, state: str, detail: str = ""):
-        color = {
-            "recording": "#F43F5E",
+        badge = {
+            "recording": "#E11D48",
+            "preview": "#E11D48",
             "transcribing": "#A855F7",
-            "injecting": "#22C55E",
+            "injecting": "#30D158",
             "loading": "#94A3B8",
-            "error": "#EF4444",
-        }.get(state, "#38BDF8")
-        self.setIcon(draw_icon(color))
-        if hasattr(self, "act_record"):
-            if state == "recording":
-                self.act_record.setText("Stop Listening")
-            else:
-                self.act_record.setText("Start Listening")
+            "error": "#DC2626",
+        }.get(state, None)
 
-        if state == "recording":
+        self.setIcon(draw_icon(badge))
+
+        if hasattr(self, "act_record"):
+            if state in ("recording", "preview"):
+                self.act_record.setText("Stop Dictation")
+            else:
+                self.act_record.setText("Start Dictation")
+
+        # Stable state vocabulary
+        label = theme.STATES.get(state, theme.STATES["idle"]).label
+        if state in ("recording", "preview"):
             tip = "Dictate — Listening…\nClick tray icon or floating pill to stop"
             if detail:
                 tip += f"\n{detail}"
             self.setToolTip(tip)
+        elif state == "idle":
+            tip = "Dictate — Ready\nClick or press hotkey to record"
+            if detail:
+                tip += f"\n{detail}"
+            self.setToolTip(tip)
         else:
-            self.setToolTip(f"Dictate — {state.title()}" + (f"\n{detail}" if detail else ""))
+            self.setToolTip(f"Dictate — {label}" + (f"\n{detail}" if detail else ""))

@@ -25,6 +25,13 @@ models/
 *.bin
 *.onnx
 
-# Temporary QA renders
+# HTML & PNG assets
+*.html
+*.png
 qa_*.png
 _qa_*.png
+
+# Agents and Stitch directories
+.agents/
+.stitch/
+
