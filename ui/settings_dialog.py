@@ -628,6 +628,10 @@ class SettingsDialog(QDialog):
         self.auto_stop_cb.setChecked(bool(data.get("auto_stop", True)))
         v2.addWidget(self.auto_stop_cb)
 
+        self.preview_cb = QCheckBox("Show live transcript preview while recording")
+        self.preview_cb.setChecked(bool(data.get("show_interim_preview", True)))
+        v2.addWidget(self.preview_cb)
+
         row = QHBoxLayout()
         row.addWidget(QLabel("Base silence threshold (seconds):"))
         self.vad_silence = QDoubleSpinBox()
@@ -660,12 +664,31 @@ class SettingsDialog(QDialog):
 
         self.model = QComboBox()
         models = [
-            ("small.en (Recommended, ~460MB)", "small.en"),
-            ("base.en (Fast, ~140MB)", "base.en"),
-            ("tiny.en (Fastest, ~75MB)", "tiny.en"),
-            ("medium.en (High accuracy, ~1.5GB)", "medium.en"),
-            ("large-v3 (Multilingual, ~3GB)", "large-v3"),
+            ("NVIDIA Parakeet TDT 0.6B v3 (SOTA Transducer, ~620MB)", "parakeet-tdt-0.6b-v3"),
+            ("large-v3-turbo (State of the Art & Fast, ~1.6GB)", "deepdml/faster-whisper-large-v3-turbo"),
+            ("distil-large-v3 (Distil-Whisper Ultra Fast, ~1.5GB)", "Systran/faster-distil-whisper-large-v3"),
+            ("medium.en (High Accuracy English, ~1.5GB)", "medium.en"),
+            ("small.en (Fast & Balanced, ~460MB)", "small.en"),
+            ("Alibaba SenseVoice Small (Multilingual 50x Fast, ~230MB)", "sense-voice-small"),
+            ("Useful Sensors Moonshine Base (INT8, ~115MB)", "moonshine-base"),
+            ("Useful Sensors Moonshine Tiny (INT8, ~45MB)", "moonshine-tiny"),
+            ("large-v3 (Maximum Accuracy Multilingual, ~3GB)", "large-v3"),
+            ("base.en (Lightweight, ~140MB)", "base.en"),
+            ("tiny.en (Ultra Lightweight, ~75MB)", "tiny.en"),
         ]
+
+        # Dynamically scan models/ folder for any user-downloaded custom models
+        try:
+            models_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models")
+            if os.path.exists(models_dir):
+                known_vals = {v for _, v in models}
+                for item in os.listdir(models_dir):
+                    item_path = os.path.join(models_dir, item)
+                    if os.path.isdir(item_path) and item not in known_vals:
+                        models.append((f"[Local Folder] {item}", item))
+        except Exception:
+            pass
+
         for label, val in models:
             self.model.addItem(label, val)
         curr = data.get("model", "small.en")
@@ -674,7 +697,25 @@ class SettingsDialog(QDialog):
             self.model.setCurrentIndex(idx)
         else:
             self.model.setCurrentText(curr)
-        form.addRow("Whisper Model", self.model)
+        form.addRow("Transcription Model (Final)", self.model)
+
+        self.streaming_model = QComboBox()
+        streaming_models = [
+            ("Zipformer-70M (High Accuracy English, ~75MB)", "zipformer-70M"),
+            ("NVIDIA FastConformer CTC (80ms Streaming, ~420MB)", "nemo-fast-conformer-80ms"),
+            ("Alibaba SenseVoice Small (Multilingual 50x Fast, ~230MB)", "sense-voice-small"),
+            ("Useful Sensors Moonshine Base (INT8, ~115MB)", "moonshine-base"),
+            ("Useful Sensors Moonshine Tiny (INT8, ~45MB)", "moonshine-tiny"),
+            ("Zipformer-20M (Ultra Lightweight, ~25MB)", "zipformer-20M"),
+            ("Zipformer-Bilingual (English & Chinese, ~80MB)", "bilingual-zh-en"),
+        ]
+        for label, val in streaming_models:
+            self.streaming_model.addItem(label, val)
+        curr_stream = data.get("streaming_model", "zipformer-70M")
+        idx_stream = self.streaming_model.findData(curr_stream)
+        if idx_stream >= 0:
+            self.streaming_model.setCurrentIndex(idx_stream)
+        form.addRow("Real-Time Preview Model", self.streaming_model)
 
         self.device = QComboBox()
         self.device.addItem("Auto-detect (GPU with CPU fallback)", "auto")
@@ -828,6 +869,8 @@ class SettingsDialog(QDialog):
             "auto_stop": self.auto_stop_cb.isChecked(),
             "vad_silence_seconds": round(self.vad_silence.value(), 1),
             "voice_commands": self.voice_commands_cb.isChecked(),
+            "show_interim_preview": self.preview_cb.isChecked(),
+            "streaming_model": self.streaming_model.currentData() or self.streaming_model.currentText(),
             "ai_polish": self.ai_enable_cb.isChecked(),
             "ai_polish_api_key": self.ai_polish_api_key.text().strip(),
             "ai_polish_base_url": self.ai_polish_base_url.text().strip(),

@@ -11,8 +11,8 @@ VAD_SPEECH_THRESHOLD = 0.3
 VAD_SILENCE_SECONDS = 0.8
 
 
-def trim_silence(audio: np.ndarray, threshold: float = 0.012,
-                 padding_samples: int = 1600) -> np.ndarray:
+def trim_silence(audio: np.ndarray, threshold: float = 0.003,
+                 padding_samples: int = 4800) -> np.ndarray:
     """Remove quiet leading/trailing samples while retaining speech padding.
 
     Returning the original array for silence avoids turning a no-speech capture
@@ -57,6 +57,7 @@ class StreamingVAD:
 
 class Recorder:
     def __init__(self, device=None, on_level=None, on_auto_stop=None, on_silence_eval=None,
+                 on_chunk=None,
                  use_vad=True,
                  vad_speech_threshold=VAD_SPEECH_THRESHOLD,
                  vad_silence_seconds=1.4):
@@ -64,6 +65,7 @@ class Recorder:
         self.on_level = on_level
         self.on_auto_stop = on_auto_stop
         self.on_silence_eval = on_silence_eval
+        self.on_chunk = on_chunk
         self.use_vad = use_vad
         self.vad_speech_threshold = vad_speech_threshold
         self.base_silence_seconds = vad_silence_seconds
@@ -109,6 +111,12 @@ class Recorder:
     def _cb(self, indata, frames, time_info, status):
         self.frames.append(indata.copy())
 
+        if self.on_chunk is not None:
+            try:
+                self.on_chunk(indata[:, 0].copy())
+            except Exception:
+                pass
+
         if self.on_level:
             try:
                 rms = float(np.sqrt(np.mean(indata ** 2)))
@@ -135,8 +143,9 @@ class Recorder:
                     self._eval_triggered_for_pause = True
                     if self.on_silence_eval:
                         try:
-                            audio_snapshot = np.concatenate(self.frames)[:, 0].astype("float32")
-                            self.on_silence_eval(audio_snapshot)
+                            audio_snapshot = self.snapshot()
+                            if len(audio_snapshot) > 0:
+                                self.on_silence_eval(audio_snapshot)
                         except Exception:
                             pass
 
@@ -149,6 +158,15 @@ class Recorder:
             except Exception as e:
                 log.debug("VAD processing error: %s", e)
 
+    def snapshot(self) -> np.ndarray:
+        """Return a snapshot copy of all recorded audio so far without stopping."""
+        if not self.frames:
+            return np.zeros(0, dtype="float32")
+        try:
+            return np.concatenate(self.frames)[:, 0].astype("float32")
+        except Exception:
+            return np.zeros(0, dtype="float32")
+
     def stop(self) -> np.ndarray:
         if self.stream is not None:
             try:
@@ -156,9 +174,7 @@ class Recorder:
                 self.stream.close()
             finally:
                 self.stream = None
-        if not self.frames:
-            return np.zeros(0, dtype="float32")
-        return np.concatenate(self.frames)[:, 0].astype("float32")
+        return self.snapshot()
 
     def duration(self) -> float:
         return sum(len(f) for f in self.frames) / SAMPLE_RATE

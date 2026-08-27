@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import QApplication, QDialog
 
 from asr.faster_whisper_engine import FasterWhisperEngine, model_loading_message
 from asr.nemotron_engine import NemotronEngine
+from asr.streaming_sherpa import SherpaStreamingEngine
 from audio.capture import MicUnavailableError, Recorder, trim_silence
 from config.settings import Settings, set_autostart
 from history.manager import HistoryManager
@@ -27,6 +28,7 @@ from punctuation.post_processor import HALLUCINATION_BLOCKLIST, polish
 from punctuation.semantic_vad import get_adaptive_silence_duration
 from punctuation.voice_commands import ACTION_DISPLAY_NAMES, get_action_command
 from ui.pill import Pill
+from ui.preview_overlay import PreviewOverlay
 from ui.tray import TrayIcon
 
 log = get_logger(__name__)
@@ -38,6 +40,7 @@ class AppSignals(QObject):
     esc_cancel = pyqtSignal()
     engine_loaded = pyqtSignal(bool, str)
     engine_result = pyqtSignal(object)
+    interim_text = pyqtSignal(str)  # Real-time partial transcript preview
 
 
 class DictateApp(QObject):
@@ -53,6 +56,7 @@ class DictateApp(QObject):
         self.target_window_title = ""
         self._history_dialog = None
         self._last_duration = 0.0
+        self._engine_lock = threading.Lock()
 
         self.history = HistoryManager(
             max_entries=self.settings.get("max_history_entries", 100),
@@ -65,6 +69,7 @@ class DictateApp(QObject):
         self.sig.esc_cancel.connect(self.on_esc)
         self.sig.engine_loaded.connect(self.on_engine_loaded)
         self.sig.engine_result.connect(self.on_result)
+        self.sig.interim_text.connect(self._on_interim_text)
 
         self.engine = self._make_engine()
 
@@ -75,6 +80,17 @@ class DictateApp(QObject):
         self.pill.copy_last_requested.connect(self.copy_last_transcript)
         self.pill.quit_requested.connect(self.quit)
         self.pill.position_changed.connect(self._on_pill_moved)
+
+        self.preview = PreviewOverlay(dark=self.pill._dark)
+        self.pill.geometry_changed.connect(self._reposition_preview)
+
+        self.streaming_engine = SherpaStreamingEngine()
+        model_name = self.settings.get("streaming_model", "zipformer-70M")
+        threading.Thread(target=lambda: self.streaming_engine.load(model_name), daemon=True).start()
+
+        self._interim_timer = QTimer(self)
+        self._interim_timer.setInterval(200)
+        self._interim_timer.timeout.connect(self._on_interim_tick)
 
         self.tray = TrayIcon()
         self.tray.toggle_requested.connect(self.sig.trigger)
@@ -118,8 +134,15 @@ class DictateApp(QObject):
     def _make_engine(self):
         if self.settings["engine"] == "nemotron":
             return NemotronEngine(binary=self.settings["nemotron_binary"])
+        model_name = self.settings.get("model", "small.en")
+        if model_name == "parakeet-tdt-0.6b-v3" or self.settings.get("engine") == "parakeet":
+            from asr.parakeet_engine import ParakeetTDTEngine
+            return ParakeetTDTEngine(num_threads=self.settings.get("cpu_threads", 4))
+        if model_name == "sense-voice-small" or model_name.startswith("moonshine-"):
+            from asr.sherpa_offline_engine import SherpaOfflineEngine
+            return SherpaOfflineEngine(model_id=model_name, num_threads=self.settings.get("cpu_threads", 4))
         return FasterWhisperEngine(
-            model_size=self.settings["model"],
+            model_size=model_name,
             device=self.settings["device"],
             compute_type=self.settings["compute_type"],
             language=self.settings["language"],
@@ -161,7 +184,8 @@ class DictateApp(QObject):
 
     def _transcribe(self, audio):
         try:
-            result = self.engine.transcribe(audio)
+            with self._engine_lock:
+                result = self.engine.transcribe(audio)
             raw_text = result.get("text", "")
             result["raw_text"] = raw_text
             log.debug("raw transcript (%d samples): %r", len(audio), raw_text)
@@ -232,14 +256,87 @@ class DictateApp(QObject):
         except Exception:
             pass
 
+    def _reposition_preview(self):
+        if hasattr(self, "preview") and self.preview is not None:
+            self.preview.reposition(self.pill.geometry())
+
+    def _on_audio_chunk(self, chunk: np.ndarray):
+        """Streaming real-time acoustic chunk ingestion (<5ms latency)."""
+        if not self.settings.get("show_interim_preview", True) or self.state != "recording":
+            return
+        if not self.streaming_engine.is_available():
+            return
+
+        text = self.streaming_engine.accept_chunk(chunk)
+        if text:
+            self.sig.interim_text.emit(text)
+            # Update adaptive silence duration live from streaming text
+            if self.recorder and self.state == "recording":
+                base_sec = float(self.settings.get("vad_silence_seconds", 1.4))
+                adaptive_sec = get_adaptive_silence_duration(text, base_silence_seconds=base_sec)
+                self.recorder.update_silence_duration(adaptive_sec)
+
+    def _on_interim_tick(self):
+        """Fallback interim evaluator if streaming engine is still downloading/initializing."""
+        if not self.settings.get("show_interim_preview", True):
+            return
+        if self.streaming_engine.is_available():
+            return  # Streaming engine handles live preview with zero polling lag
+        if not self.engine.is_loaded() or self.state != "recording" or not self.recorder:
+            return
+
+        audio_snapshot = self.recorder.snapshot()
+        # Start showing preview as soon as ~0.5s of speech (8,000 samples @ 16kHz) is captured
+        if len(audio_snapshot) < 8000:
+            return
+
+        # For low-latency streaming, transcribe the active tail window (last 2.5s / 40,000 samples)
+        # to ensure CPU inference completes in ~30-40ms per tick.
+        eval_audio = audio_snapshot if len(audio_snapshot) <= 40000 else audio_snapshot[-40000:]
+
+        def _worker():
+            if not self._engine_lock.acquire(blocking=False):
+                return
+            try:
+                # Use fast=True for instant greedy decode without timestamp alignment
+                res = self.engine.transcribe(eval_audio, fast=True) if hasattr(self.engine, "transcribe") else {}
+                if isinstance(res, dict):
+                    raw_text = res.get("text", "").strip()
+                    if raw_text and raw_text.lower() not in HALLUCINATION_BLOCKLIST:
+                        self.sig.interim_text.emit(raw_text)
+
+                        # Update adaptive silence duration from the latest text in the same pass
+                        if self.recorder and self.state == "recording":
+                            base_sec = float(self.settings.get("vad_silence_seconds", 1.4))
+                            adaptive_sec = get_adaptive_silence_duration(raw_text, base_silence_seconds=base_sec)
+                            self.recorder.update_silence_duration(adaptive_sec)
+            except Exception as exc:
+                log.debug("interim preview transcription error: %s", exc)
+            finally:
+                self._engine_lock.release()
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    @pyqtSlot(str)
+    def _on_interim_text(self, text: str):
+        if self.state == "recording" and self.settings.get("show_interim_preview", True):
+            self._reposition_preview()
+            self.preview.set_text(text)
+
     def _on_silence_eval(self, audio_snapshot):
         """Asynchronously evaluates semantic thought completion on partial audio to dynamically adapt silence duration."""
+        # If the fast interim timer is already running, it updates adaptive silence on every tick.
+        if self.settings.get("show_interim_preview", True) and self._interim_timer.isActive():
+            return
+
         if not self.engine.is_loaded() or len(audio_snapshot) < 8000:
             return
 
         def _worker():
+            if not self._engine_lock.acquire(blocking=False):
+                return
             try:
-                res = self.engine.transcribe(audio_snapshot)
+                res = self.engine.transcribe(audio_snapshot, fast=True)
                 if isinstance(res, dict):
                     text = res.get("text", "")
                     base_sec = float(self.settings.get("vad_silence_seconds", 1.4))
@@ -248,6 +345,8 @@ class DictateApp(QObject):
                         self.recorder.update_silence_duration(adaptive_sec)
             except Exception as exc:
                 log.debug("Semantic silence evaluation error: %s", exc)
+            finally:
+                self._engine_lock.release()
 
         threading.Thread(target=_worker, daemon=True).start()
 
@@ -263,6 +362,7 @@ class DictateApp(QObject):
                 on_level=self.pill.set_level,
                 on_auto_stop=self.sig.release.emit,
                 on_silence_eval=self._on_silence_eval,
+                on_chunk=self._on_audio_chunk,
                 use_vad=self.settings.get("auto_stop", True),
                 vad_silence_seconds=float(self.settings.get("vad_silence_seconds", 1.4)),
             )
@@ -283,8 +383,19 @@ class DictateApp(QObject):
         self._esc_hook.register()
         self._set_state("recording", "Listening\u2026")
         self._play_sound("start")
+        self._reposition_preview()
+        if self.settings.get("show_interim_preview", True):
+            if self.streaming_engine.is_available():
+                self.streaming_engine.start_stream()
+            else:
+                self._interim_timer.start()
 
     def _finish_recording(self, cancel: bool):
+        self._interim_timer.stop()
+        if self.streaming_engine.is_available():
+            self.streaming_engine.stop_stream()
+        if hasattr(self, "preview") and self.preview is not None:
+            self.preview.hide_animated()
         self._unhook_esc()
         audio = self.recorder.stop()
         duration = self.recorder.duration()
@@ -464,9 +575,19 @@ class DictateApp(QObject):
             engine_changed = any(vals.get(k) != self.settings.get(k) for k in engine_keys
                                  if k in vals)
 
+            streaming_changed = vals.get("streaming_model") != self.settings.get("streaming_model")
             for k, v in vals.items():
                 self.settings[k] = v
             log.info("settings updated: %s", ", ".join(sorted(vals.keys())))
+
+            if hasattr(self, "streaming_engine") and streaming_changed:
+                new_s_model = vals.get("streaming_model", "zipformer-70M")
+                threading.Thread(target=lambda: self.streaming_engine.load(new_s_model), daemon=True).start()
+
+            if hasattr(self, "preview") and self.preview:
+                self.preview.set_dark_mode(self.pill._dark)
+                if not self.settings.get("show_interim_preview", True):
+                    self.preview.hide_animated()
 
             # Custom vocabulary is read per-transcription, not baked into the
             # loaded model, so it can be updated live without a reload.
@@ -514,6 +635,8 @@ class DictateApp(QObject):
         log.info("quitting")
         if self.state == "recording":
             self._finish_recording(cancel=True)
+        if hasattr(self, "preview") and self.preview is not None:
+            self.preview.hide()
         self._unhook_esc()
         self.hotkeys.unregister()
         QApplication.instance().quit()

@@ -84,15 +84,18 @@ class FasterWhisperEngine(ASREngine):
     def is_loaded(self) -> bool:
         return self.model is not None
 
-    def transcribe(self, audio) -> dict:
-        if not self.is_loaded():
+    def transcribe(self, audio, fast: bool = False) -> dict:
+        if not self.model:
             raise RuntimeError("model not loaded")
-        log.debug("transcribe start: %d samples", getattr(audio, "shape", (None,))[0] if hasattr(audio, "shape") else len(audio))
+        log.debug("transcribe start: %d samples (fast=%s)", len(audio) if hasattr(audio, "__len__") else 0, fast)
         segments, _info = self.model.transcribe(
             audio,
             language=self.language,
-            vad_filter=self.vad_filter,
-            beam_size=1,  # greedy decode: fastest, and multi-beam rarely helps short dictation utterances
+            vad_filter=False if fast else self.vad_filter,
+            beam_size=1,
+            temperature=0.0,
+            condition_on_previous_text=False,
+            without_timestamps=True if fast else False,
             initial_prompt=self.initial_prompt or None,
         )
         text = " ".join(s.text.strip() for s in segments).strip()

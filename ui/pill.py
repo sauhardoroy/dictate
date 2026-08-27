@@ -55,6 +55,7 @@ class Pill(QWidget):
     copy_last_requested = pyqtSignal()
     quit_requested = pyqtSignal()
     position_changed = pyqtSignal(int, int)
+    geometry_changed = pyqtSignal()
 
     def __init__(self, x: int = None, y: int = None):
         super().__init__(
@@ -256,6 +257,7 @@ class Pill(QWidget):
         rect = QRect(0, 0, w, theme.PILL_HEIGHT)
         rect.moveCenter(center)
         self.setGeometry(rect)
+        self.geometry_changed.emit()
         self._execute_shader_pass()
         self.update()
 
@@ -431,6 +433,7 @@ class Pill(QWidget):
                 self._dragged = True
                 self.move(self._press_origin + delta)
                 self._update_background_grab()
+                self.geometry_changed.emit()
 
     def mouseReleaseEvent(self, e):
         if e.button() == Qt.MouseButton.LeftButton:

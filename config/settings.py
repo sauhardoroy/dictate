@@ -35,6 +35,8 @@ DEFAULTS = {
     "pill_y": None,
     "enable_history": True,
     "max_history_entries": 100,
+    "show_interim_preview": True,
+    "streaming_model": "zipformer-70M",
 }
 
 
@@ -121,6 +123,8 @@ _VALIDATORS = {
     "pill_y": _is_optional_coordinate,
     "enable_history": _is_bool,
     "max_history_entries": lambda v: isinstance(v, int) and not isinstance(v, bool) and 10 <= v <= 10_000,
+    "show_interim_preview": _is_bool,
+    "streaming_model": lambda v: isinstance(v, str) and bool(v.strip()),
 }
 
 

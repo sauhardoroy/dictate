@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dictate ASR Model Benchmark & Playground</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Navigation Header -->
+    <header class="top-nav">
+      <div class="brand">
+        <div class="brand-logo">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="22"></line>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>Dictate<span>Bench</span></h1>
+          <p>ASR Model Playground & Benchmark Suite</p>
+        </div>
+      </div>
+
+      <nav class="nav-tabs">
+        <button class="nav-tab active" data-tab="tab-playground">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+          Live Playground
+        </button>
+        <button class="nav-tab" data-tab="tab-compare">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+          Side-by-Side Benchmark
+        </button>
+        <button class="nav-tab" data-tab="tab-catalog">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          Model Catalog
+        </button>
+      </nav>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+
+      <!-- TAB 1: LIVE MIC PLAYGROUND -->
+      <section id="tab-playground" class="tab-pane active">
+        <div class="playground-layout">
+          <!-- Control Sidebar -->
+          <div class="glass-card control-card">
+            <h2 class="card-title">Live Model Selection</h2>
+            <p class="card-subtitle">Select an online streaming model to test microphone speech in real time.</p>
+
+            <div class="form-group">
+              <label for="stream-model-select">Active Streaming Model</label>
+              <select id="stream-model-select" class="custom-select">
+                <option value="zipformer-70M">Sherpa Zipformer-70M (~2.8% WER, ~0.4ms) [Recommended]</option>
+                <option value="zipformer-20M">Sherpa Zipformer-20M (~6.5% WER, ~0.2ms) [Ultra Fast]</option>
+                <option value="zipformer-bilingual-zh-en">Sherpa Bilingual (En/Zh) (~3.1% WER)</option>
+              </select>
+            </div>
+
+            <div class="metrics-grid">
+              <div class="metric-box">
+                <span class="metric-label">Chunk Latency</span>
+                <span id="metric-latency" class="metric-val">0.00 <small>ms</small></span>
+              </div>
+              <div class="metric-box">
+                <span class="metric-label">Stream Status</span>
+                <span id="metric-status" class="metric-val status-idle">IDLE</span>
+              </div>
+              <div class="metric-box">
+                <span class="metric-label">Sample Rate</span>
+                <span class="metric-val">16,000 <small>Hz</small></span>
+              </div>
+              <div class="metric-box">
+                <span class="metric-label">Decoded Words</span>
+                <span id="metric-words" class="metric-val">0</span>
+              </div>
+            </div>
+
+            <div class="action-btn-row">
+              <button id="btn-record-toggle" class="btn btn-primary btn-record">
+                <span class="mic-icon-pulse"></span>
+                <span id="record-btn-text">Start Streaming</span>
+              </button>
+              <button id="btn-clear-stream" class="btn btn-ghost">Clear</button>
+            </div>
+            <p class="keyboard-hint">Tip: You can press <strong>Spacebar</strong> to start/stop listening.</p>
+          </div>
+
+          <!-- Live Output & Visualizer -->
+          <div class="glass-card display-card">
+            <div class="display-header">
+              <div class="display-title-group">
+                <h3 class="card-title">Real-Time Transcription Stream</h3>
+                <span id="active-model-badge" class="badge badge-accent">Zipformer-70M</span>
+              </div>
+              <div class="visualizer-wrapper">
+                <canvas id="mic-visualizer" width="220" height="36"></canvas>
+              </div>
+            </div>
+
+            <!-- Dictate 4-Word Floating Capsule Preview -->
+            <div class="preview-capsule-container">
+              <div class="preview-capsule-label">Live 4-Word Sliding Ticker</div>
+              <div id="live-4word-capsule" class="live-4word-capsule">
+                <span class="capsule-dot"></span>
+                <span class="capsule-text" id="capsule-words-span">
+                  <span class="word-fade3">Speak</span>
+                  <span class="word-fade2">into</span>
+                  <span class="word-fade1">your</span>
+                  <span class="word-active">microphone</span>
+                </span>
+              </div>
+            </div>
+
+            <!-- Full Cumulative Text Area -->
+            <div class="transcript-box">
+              <label class="transcript-box-label">Full Transcript</label>
+              <div id="full-stream-text" class="transcript-content" placeholder="Your live spoken words will stream here in real time..."></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: SIDE-BY-SIDE BENCHMARK -->
+      <section id="tab-compare" class="tab-pane">
+        <div class="benchmark-layout">
+          <div class="glass-card">
+            <h2 class="card-title">Multi-Model Comparative Benchmark</h2>
+            <p class="card-subtitle">Upload any audio sample or record one to benchmark Real-Time Factor (RTF), accuracy, and latency across NVIDIA Parakeet TDT, Zipformer, and Whisper models.</p>
+
+            <div class="upload-dropzone" id="dropzone">
+              <input type="file" id="audio-file-input" accept="audio/*" class="file-input-hidden">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <p class="dropzone-text"><strong>Click to upload audio</strong> or drag & drop (WAV, MP3, FLAC, M4A)</p>
+              <span id="selected-file-name" class="selected-file-tag">No file selected</span>
+            </div>
+
+            <div class="model-selection-checklist">
+              <span class="checklist-title">Select Models to Compare:</span>
+              <div class="checkbox-grid">
+                <label class="checkbox-label">
+                  <input type="checkbox" name="benchmark-model" value="parakeet-tdt-0.6b-v3" checked>
+                  <span class="cb-custom"></span>
+                  NVIDIA Parakeet TDT 0.6B v3 (INT8)
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" name="benchmark-model" value="zipformer-70M" checked>
+                  <span class="cb-custom"></span>
+                  Sherpa Zipformer-70M
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" name="benchmark-model" value="whisper-large-v3-turbo">
+                  <span class="cb-custom"></span>
+                  Whisper Large v3 Turbo
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" name="benchmark-model" value="whisper-distil-large-v3">
+                  <span class="cb-custom"></span>
+                  Distil-Whisper Large v3
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" name="benchmark-model" value="whisper-medium.en">
+                  <span class="cb-custom"></span>
+                  Whisper Medium.en
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" name="benchmark-model" value="whisper-small.en" checked>
+                  <span class="cb-custom"></span>
+                  Whisper Small.en
+                </label>
+              </div>
+            </div>
+
+            <button id="btn-run-benchmark" class="btn btn-primary btn-large">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Run Side-by-Side Benchmark
+            </button>
+          </div>
+
+          <!-- Benchmark Results Container -->
+          <div id="benchmark-results-card" class="glass-card" style="display: none;">
+            <div class="results-header">
+              <h3 class="card-title">Benchmark Results</h3>
+              <div class="results-stats-row" id="benchmark-summary-stats"></div>
+            </div>
+
+            <!-- Comparative Chart -->
+            <div class="chart-container">
+              <canvas id="benchmark-chart" height="120"></canvas>
+            </div>
+
+            <!-- Comparison Table -->
+            <div class="table-responsive">
+              <table class="benchmark-table">
+                <thead>
+                  <tr>
+                    <th>Model</th>
+                    <th>Parameters</th>
+                    <th>Inference Time</th>
+                    <th>Real-Time Factor (RTF)</th>
+                    <th>Speedup</th>
+                    <th>Transcribed Output</th>
+                  </tr>
+                </thead>
+                <tbody id="benchmark-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: MODEL CATALOG -->
+      <section id="tab-catalog" class="tab-pane">
+        <div class="catalog-header">
+          <div>
+            <h2 class="card-title">Supported Speech Models</h2>
+            <p class="card-subtitle">Manage, download, and verify local ASR neural networks.</p>
+          </div>
+          <button id="btn-refresh-catalog" class="btn btn-ghost">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            Refresh Status
+          </button>
+        </div>
+
+        <div id="model-cards-grid" class="cards-grid">
+          <!-- Populated dynamically via app.js -->
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

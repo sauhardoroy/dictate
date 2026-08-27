@@ -147,6 +147,7 @@ def get_clipboard_text(max_retries: int = 5, retry_delay: float = 0.02) -> str:
 # Constants for SendInput
 INPUT_KEYBOARD = 1
 KEYEVENTF_KEYUP = 0x0002
+KEYEVENTF_UNICODE = 0x0004
 VK_SHIFT = 0x10
 VK_CONTROL = 0x11
 VK_ALT = 0x12
@@ -255,6 +256,9 @@ def execute_action(action: str, target_hwnd: int = 0) -> bool:
     return True
 
 
+_restore_timer = None  # Track in-flight clipboard restore timer
+
+
 def paste_text(text: str, restore: bool = False, delay_ms: int = 150, target_hwnd: int = 0) -> bool:
     """Paste ``text`` into the captured target window.
 
@@ -262,6 +266,8 @@ def paste_text(text: str, restore: bool = False, delay_ms: int = 150, target_hwn
     be restored, returns ``False`` rather than risking a paste into a different
     application that happened to receive foreground focus.
     """
+    global _restore_timer
+
     if not text:
         return False
 
@@ -271,6 +277,13 @@ def paste_text(text: str, restore: bool = False, delay_ms: int = 150, target_hwn
     if target_hwnd and not activate_window(target_hwnd):
         log.warning("paste aborted: unable to activate target hwnd=%s", target_hwnd)
         return False
+
+    # Cancel any pending clipboard restore from a previous paste to prevent
+    # out-of-order overwrites during rapid back-to-back dictations.
+    if _restore_timer is not None:
+        if hasattr(_restore_timer, 'cancel'):
+            _restore_timer.cancel()
+        _restore_timer = None
 
     backup = None
     have_backup = False
@@ -295,10 +308,11 @@ def paste_text(text: str, restore: bool = False, delay_ms: int = 150, target_hwn
 
     # 3. Restore previous clipboard only if explicitly requested
     if restore and have_backup:
-        threading.Timer(
+        _restore_timer = threading.Timer(
             max(delay_ms, 100) / 1000.0,
             lambda: copy_to_clipboard(backup),
-        ).start()
+        )
+        _restore_timer.start()
 
     return True
 
