@@ -108,6 +108,25 @@ class EnginePool:
                     self._loaded_engines[model_id] = ("sherpa_offline", recognizer)
                     return self._loaded_engines[model_id]
 
+                elif model_id == "paraformer-zh-en":
+                    # Alibaba Streaming Paraformer (Online)
+                    model_dir = huggingface_hub.snapshot_download(meta["hf_repo"], allow_patterns=["*.onnx", "tokens.txt"])
+                    encoder = os.path.join(model_dir, "encoder.int8.onnx" if os.path.exists(os.path.join(model_dir, "encoder.int8.onnx")) else "encoder.onnx")
+                    decoder = os.path.join(model_dir, "decoder.int8.onnx" if os.path.exists(os.path.join(model_dir, "decoder.int8.onnx")) else "decoder.onnx")
+                    tokens_file = os.path.join(model_dir, "tokens.txt")
+
+                    recognizer = sherpa_onnx.OnlineRecognizer.from_paraformer(
+                        tokens=tokens_file,
+                        encoder=encoder,
+                        decoder=decoder,
+                        num_threads=4,
+                        sample_rate=16000,
+                        feature_dim=80,
+                        decoding_method="greedy_search",
+                    )
+                    self._loaded_engines[model_id] = ("sherpa_online", recognizer)
+                    return self._loaded_engines[model_id]
+
                 elif model_id.startswith("moonshine-"):
                     # Useful Sensors Moonshine (Offline)
                     model_dir = huggingface_hub.snapshot_download(meta["hf_repo"], allow_patterns=["*.onnx", "tokens.txt"])

@@ -703,6 +703,7 @@ class SettingsDialog(QDialog):
         parakeet_status = "✓ Ready" if is_model_cached("parakeet-tdt-0.6b-v3") else "↓ Auto-download"
         sensevoice_status = "✓ Ready" if is_model_cached("sense-voice-small") else "↓ Auto-download"
         fastconformer_status = "✓ Ready" if is_model_cached("nemo-fast-conformer-80ms") else "↓ Auto-download"
+        paraformer_status = "✓ Ready" if is_model_cached("paraformer-zh-en") else "↓ Auto-download"
 
         models = [
             (f"🚀 NVIDIA Parakeet TDT 0.6B v3 (English FastConformer, ~250MB) [{parakeet_status}]", "parakeet-tdt-0.6b-v3"),
@@ -722,10 +723,16 @@ class SettingsDialog(QDialog):
         self.streaming_model = QComboBox()
         streaming_models = [
             (f"🚀 NVIDIA FastConformer CTC 80ms (Real-Time Preview, ~420MB) [{fastconformer_status}]", "nemo-fast-conformer-80ms"),
+            (f"🌐 Alibaba Streaming Paraformer (Bilingual ZH/EN, ~235MB) [{paraformer_status}]", "paraformer-zh-en"),
         ]
         for label, val in streaming_models:
             self.streaming_model.addItem(label, val)
-        self.streaming_model.setCurrentIndex(0)
+        curr_streaming = data.get("streaming_model", "nemo-fast-conformer-80ms")
+        s_idx = self.streaming_model.findData(curr_streaming)
+        if s_idx >= 0:
+            self.streaming_model.setCurrentIndex(s_idx)
+        else:
+            self.streaming_model.setCurrentIndex(0)
         form.addRow("Real-Time Preview Model", self.streaming_model)
 
         self.device = QComboBox()

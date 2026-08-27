@@ -5,17 +5,19 @@ from asr.model_manager import SUPPORTED_MODELS, is_model_cached, get_model_files
 
 
 def test_supported_models_restricted_suite():
-    # Exactly 2 NVIDIA models and 1 Alibaba model
+    # Exactly 2 NVIDIA models and 2 Alibaba models
     assert set(SUPPORTED_MODELS.keys()) == {
         "parakeet-tdt-0.6b-v3",
         "nemo-fast-conformer-80ms",
-        "sense-voice-small"
+        "sense-voice-small",
+        "paraformer-zh-en",
     }
 
     # Verify providers
     assert SUPPORTED_MODELS["parakeet-tdt-0.6b-v3"]["provider"] == "NVIDIA"
     assert SUPPORTED_MODELS["nemo-fast-conformer-80ms"]["provider"] == "NVIDIA"
     assert SUPPORTED_MODELS["sense-voice-small"]["provider"] == "Alibaba"
+    assert SUPPORTED_MODELS["paraformer-zh-en"]["provider"] == "Alibaba"
 
 
 def test_unsupported_model_raises_value_error():

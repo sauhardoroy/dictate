@@ -41,7 +41,7 @@ class SherpaStreamingEngine:
         return self._is_ready and self.recognizer is not None
 
     def load(self, model_choice: str = "nemo-fast-conformer-80ms", async_download: bool = False) -> bool:
-        """Initialize the Sherpa-ONNX online recognizer with NVIDIA FastConformer CTC."""
+        """Initialize the Sherpa-ONNX online recognizer with NVIDIA FastConformer CTC or Alibaba Paraformer."""
         try:
             import sherpa_onnx
             from asr.model_manager import ensure_model_downloaded
@@ -49,7 +49,34 @@ class SherpaStreamingEngine:
             log.warning("sherpa-onnx not installed; streaming live preview disabled")
             return False
 
-        # NVIDIA FastConformer CTC (80ms Streaming)
+        # 1. Alibaba Streaming Paraformer (Bilingual ZH/EN)
+        if model_choice in ("paraformer-zh-en", "streaming-paraformer", "paraformer", "alibaba-paraformer", "sense-voice-small"):
+            try:
+                model_dir = ensure_model_downloaded("paraformer-zh-en")
+                log.info("Loading Alibaba Streaming Paraformer (Bilingual)...")
+                encoder = os.path.join(model_dir, "encoder.int8.onnx")
+                if not os.path.exists(encoder):
+                    encoder = os.path.join(model_dir, "encoder.onnx")
+                decoder = os.path.join(model_dir, "decoder.int8.onnx")
+                if not os.path.exists(decoder):
+                    decoder = os.path.join(model_dir, "decoder.onnx")
+                tokens = os.path.join(model_dir, "tokens.txt")
+                self.recognizer = sherpa_onnx.OnlineRecognizer.from_paraformer(
+                    tokens=tokens,
+                    encoder=encoder,
+                    decoder=decoder,
+                    num_threads=2,
+                    sample_rate=16000,
+                    feature_dim=80,
+                    decoding_method="greedy_search",
+                )
+                self._is_ready = True
+                log.info("Alibaba Streaming Paraformer ready")
+                return True
+            except Exception as e:
+                log.warning("Alibaba Paraformer load failed (%s); checking fallbacks", e)
+
+        # 2. NVIDIA FastConformer CTC (80ms Streaming)
         try:
             model_dir = ensure_model_downloaded("nemo-fast-conformer-80ms")
             log.info("Loading NVIDIA Streaming FastConformer CTC (80ms)...")

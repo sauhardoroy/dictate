@@ -6,7 +6,7 @@ from log import get_logger
 
 log = get_logger(__name__)
 
-# Strictly restricted models suite: 2 NVIDIA models + 1 Alibaba model
+# Strictly restricted models suite: 2 NVIDIA models + 2 Alibaba models (Offline & Streaming)
 SUPPORTED_MODELS = {
     # NVIDIA Model 1: Final Speech Dictation (Offline)
     "parakeet-tdt-0.6b-v3": {
@@ -37,6 +37,16 @@ SUPPORTED_MODELS = {
         "files": ["model.int8.onnx", "tokens.txt"],
         "size_mb": 110,
         "description": "Multilingual (EN, ZH, JA, KO, YUE) with Inverse Text Normalization.",
+    },
+    # Alibaba Model 2: Real-time Live Preview Ticker (Streaming)
+    "paraformer-zh-en": {
+        "name": "Alibaba Streaming Paraformer (Bilingual)",
+        "provider": "Alibaba",
+        "type": "streaming",
+        "repo_id": "csukuangfj/sherpa-onnx-streaming-paraformer-bilingual-zh-en",
+        "files": ["encoder.int8.onnx", "decoder.int8.onnx", "tokens.txt"],
+        "size_mb": 236,
+        "description": "Alibaba FunASR real-time streaming speech recognition (English + Mandarin).",
     },
 }
 
@@ -70,7 +80,18 @@ def is_model_cached(model_id: str) -> bool:
     # 1. Check local models directory
     local_dir = os.path.join(get_models_dir(), model_id)
     if os.path.isdir(local_dir):
-        if all(os.path.exists(os.path.join(local_dir, f)) for f in meta["files"]):
+        def _check_local_file(f: str) -> bool:
+            if os.path.exists(os.path.join(local_dir, f)):
+                return True
+            if f == "model.int8.onnx" and os.path.exists(os.path.join(local_dir, "model.onnx")):
+                return True
+            if f == "encoder.int8.onnx" and os.path.exists(os.path.join(local_dir, "encoder.onnx")):
+                return True
+            if f == "decoder.int8.onnx" and os.path.exists(os.path.join(local_dir, "decoder.onnx")):
+                return True
+            return False
+
+        if all(_check_local_file(f) for f in meta["files"]):
             return True
 
     # 2. Check HuggingFace hub cache
@@ -79,6 +100,18 @@ def is_model_cached(model_id: str) -> bool:
         for f in meta["files"]:
             cached = try_to_load_from_cache(repo_id=meta["repo_id"], filename=f)
             if not isinstance(cached, str) or not os.path.exists(cached):
+                if f == "model.int8.onnx":
+                    alt = try_to_load_from_cache(repo_id=meta["repo_id"], filename="model.onnx")
+                    if isinstance(alt, str) and os.path.exists(alt):
+                        continue
+                if f == "encoder.int8.onnx":
+                    alt = try_to_load_from_cache(repo_id=meta["repo_id"], filename="encoder.onnx")
+                    if isinstance(alt, str) and os.path.exists(alt):
+                        continue
+                if f == "decoder.int8.onnx":
+                    alt = try_to_load_from_cache(repo_id=meta["repo_id"], filename="decoder.onnx")
+                    if isinstance(alt, str) and os.path.exists(alt):
+                        continue
                 return False
         return True
     except Exception:
@@ -125,9 +158,17 @@ def get_model_files(model_id: str) -> dict[str, str]:
     result = {}
     for f in meta["files"]:
         path = os.path.join(model_dir, f)
-        # Handle fallback for sense-voice model.int8.onnx vs model.onnx
+        # Handle fallback for sense-voice and paraformer int8 vs full onnx
         if not os.path.exists(path) and f == "model.int8.onnx":
             alt_path = os.path.join(model_dir, "model.onnx")
+            if os.path.exists(alt_path):
+                path = alt_path
+        if not os.path.exists(path) and f == "encoder.int8.onnx":
+            alt_path = os.path.join(model_dir, "encoder.onnx")
+            if os.path.exists(alt_path):
+                path = alt_path
+        if not os.path.exists(path) and f == "decoder.int8.onnx":
+            alt_path = os.path.join(model_dir, "decoder.onnx")
             if os.path.exists(alt_path):
                 path = alt_path
         result[f] = path

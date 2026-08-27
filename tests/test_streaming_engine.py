@@ -39,3 +39,17 @@ def test_streaming_engine_fallback_when_uninitialized():
     engine.start_stream()
     assert engine.accept_chunk(np.zeros(512, dtype=np.float32)) is None
     assert engine.stop_stream() == ""
+
+
+def test_streaming_engine_paraformer_load():
+    engine = SherpaStreamingEngine()
+    ok = engine.load(model_choice="paraformer-zh-en")
+    assert ok is True
+    assert engine.is_available() is True
+    engine.start_stream()
+    assert engine.stream is not None
+    silence = np.zeros(1024, dtype=np.float32)
+    res = engine.accept_chunk(silence)
+    assert res is None or isinstance(res, str)
+    final = engine.stop_stream()
+    assert isinstance(final, str)
