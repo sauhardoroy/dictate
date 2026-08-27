@@ -38,6 +38,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui import theme
+
 
 class KeyCaptureButton(QPushButton):
     """Clean Material/Apple keycap capture button."""
@@ -350,9 +352,7 @@ class SegmentedNavBar(QWidget):
             p.drawRoundedRect(pill_rect, 6.0, 6.0)
 
         # Clean Text Labels
-        font = QFont(self.font())
-        font.setPointSize(10)
-        font.setWeight(QFont.Weight.DemiBold)
+        font = theme.get_font(12, QFont.Weight.DemiBold)
         p.setFont(font)
 
         pad = 3.0
@@ -666,7 +666,7 @@ class SettingsDialog(QDialog):
         silence_layout.addWidget(self.silence_helper)
         v2.addWidget(self.silence_container)
 
-        self.manual_helper = QLabel("💡 Manual Mode active: Dictate will record continuously without cutting you off. Click the floating pill, tray icon, or press your hotkey when done.")
+        self.manual_helper = QLabel("Manual Mode active: Dictate will record continuously until you click the floating pill, tray icon, or press your hotkey.")
         self.manual_helper.setStyleSheet("color: #38BDF8; font-size: 11px; margin-top: 2px;")
         self.manual_helper.setWordWrap(True)
         v2.addWidget(self.manual_helper)
@@ -700,14 +700,14 @@ class SettingsDialog(QDialog):
         self.model = QComboBox()
         from asr.model_manager import is_model_cached
         
-        parakeet_status = "✓ Ready" if is_model_cached("parakeet-tdt-0.6b-v3") else "↓ Auto-download"
-        sensevoice_status = "✓ Ready" if is_model_cached("sense-voice-small") else "↓ Auto-download"
-        fastconformer_status = "✓ Ready" if is_model_cached("nemo-fast-conformer-80ms") else "↓ Auto-download"
-        paraformer_status = "✓ Ready" if is_model_cached("paraformer-zh-en") else "↓ Auto-download"
+        parakeet_status = "Ready" if is_model_cached("parakeet-tdt-0.6b-v3") else "Auto-download"
+        sensevoice_status = "Ready" if is_model_cached("sense-voice-small") else "Auto-download"
+        fastconformer_status = "Ready" if is_model_cached("nemo-fast-conformer-80ms") else "Auto-download"
+        paraformer_status = "Ready" if is_model_cached("paraformer-zh-en") else "Auto-download"
 
         models = [
-            (f"🚀 NVIDIA Parakeet TDT 0.6B v3 (English FastConformer, ~250MB) [{parakeet_status}]", "parakeet-tdt-0.6b-v3"),
-            (f"🌐 Alibaba SenseVoice Small (Multilingual 50x Fast + ITN, ~110MB) [{sensevoice_status}]", "sense-voice-small"),
+            (f"NVIDIA Parakeet TDT 0.6B v3 (English FastConformer, ~250MB) [{parakeet_status}]", "parakeet-tdt-0.6b-v3"),
+            (f"Alibaba SenseVoice Small (Multilingual 50x Fast + ITN, ~110MB) [{sensevoice_status}]", "sense-voice-small"),
         ]
 
         for label, val in models:
@@ -722,8 +722,8 @@ class SettingsDialog(QDialog):
 
         self.streaming_model = QComboBox()
         streaming_models = [
-            (f"🚀 NVIDIA FastConformer CTC 80ms (Real-Time Preview, ~420MB) [{fastconformer_status}]", "nemo-fast-conformer-80ms"),
-            (f"🌐 Alibaba Streaming Paraformer (Bilingual ZH/EN, ~235MB) [{paraformer_status}]", "paraformer-zh-en"),
+            (f"NVIDIA FastConformer CTC 80ms (Real-Time Preview, ~420MB) [{fastconformer_status}]", "nemo-fast-conformer-80ms"),
+            (f"Alibaba Streaming Paraformer (Bilingual ZH/EN, ~235MB) [{paraformer_status}]", "paraformer-zh-en"),
         ]
         for label, val in streaming_models:
             self.streaming_model.addItem(label, val)
@@ -783,10 +783,10 @@ class SettingsDialog(QDialog):
                 pass
 
         if hw_count > 0:
-            lbl_status = QLabel(f"✓ Active: {hw_count:,} technical keywords & jargon loaded from {hw_file}")
+            lbl_status = QLabel(f"Active: {hw_count:,} technical keywords loaded from {hw_file}")
             lbl_status.setStyleSheet("color: #38BDF8; font-weight: 500; font-size: 12px; margin-top: 4px;")
         else:
-            lbl_status = QLabel(f"ℹ No hotwords file found at {hw_file}. Create it to boost domain terms.")
+            lbl_status = QLabel(f"No hotwords file found at {hw_file}. Create it to boost domain terms.")
             lbl_status.setStyleSheet("color: #94A3B8; font-size: 11px; margin-top: 4px;")
         v2.addWidget(lbl_status)
 

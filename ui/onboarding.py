@@ -15,9 +15,7 @@ from ui.settings_dialog import KeyCaptureButton
 
 
 def _font(size: int, weight: QFont.Weight = QFont.Weight.Normal) -> QFont:
-    font = QFont("Segoe UI Variable Text", size)
-    font.setWeight(weight)
-    return font
+    return theme.get_font(size, weight)
 
 
 def _glass_backdrop(size, dark: bool, accent: QColor) -> QPixmap:

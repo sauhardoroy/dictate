@@ -591,20 +591,20 @@ class Pill(QWidget):
 
         if not self._cards:
             p.save()
-            font_prompt = QFont("Segoe UI Variable Text", 9, QFont.Weight.Medium)
+            font_prompt = theme.get_font(10, QFont.Weight.Medium)
             font_prompt.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
             p.setFont(font_prompt)
-            p.setPen(QColor(148, 163, 184, 140) if self._dark else QColor(100, 116, 139, 140))
+            p.setPen(QColor(148, 163, 184, 150) if self._dark else QColor(100, 116, 139, 150))
             prompt_rect = QRectF(16.0, 40.0, w - 32.0, h - 46.0)
             p.drawText(prompt_rect, Qt.AlignmentFlag.AlignCenter, "Listening… speak naturally")
             p.restore()
             return
 
-        font_past = QFont("Segoe UI Variable Text", 9, QFont.Weight.Normal)
+        font_past = theme.get_font(10, QFont.Weight.Normal)
         font_past.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
         fm_past = QFontMetrics(font_past)
 
-        font_main = QFont("Segoe UI Variable Text", 10, QFont.Weight.Bold)
+        font_main = theme.get_font(11, QFont.Weight.DemiBold)
         font_main.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
         fm_main = QFontMetrics(font_main)
 

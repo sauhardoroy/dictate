@@ -40,15 +40,15 @@ class TrayIcon(QSystemTrayIcon):
         menu = QMenu()
         menu.setStyleSheet(theme.get_dialog_stylesheet(dark=True))
 
-        self.act_record = QAction("🎙 Start Listening (Toggle)", self)
+        self.act_record = QAction("Start Listening", self)
         self.act_record.triggered.connect(self.toggle_requested.emit)
-        act_copy_last = QAction("📋 Copy Last Transcript", self)
+        act_copy_last = QAction("Copy Last Transcript", self)
         act_copy_last.triggered.connect(self.copy_last_requested.emit)
-        act_history = QAction("🕒 Transcript History…", self)
+        act_history = QAction("Transcript History…", self)
         act_history.triggered.connect(self.history_requested.emit)
-        act_settings = QAction("⚙️ Settings…", self)
+        act_settings = QAction("Settings…", self)
         act_settings.triggered.connect(self.settings_requested.emit)
-        act_quit = QAction("✕ Quit Dictate", self)
+        act_quit = QAction("Quit Dictate", self)
         act_quit.triggered.connect(self.quit_requested.emit)
 
         menu.addAction(self.act_record)
@@ -82,9 +82,9 @@ class TrayIcon(QSystemTrayIcon):
         self.setIcon(draw_icon(color))
         if hasattr(self, "act_record"):
             if state == "recording":
-                self.act_record.setText("⏹ Stop Listening (Finish & Transcribe)")
+                self.act_record.setText("Stop Listening")
             else:
-                self.act_record.setText("🎙 Start Listening (Toggle)")
+                self.act_record.setText("Start Listening")
 
         if state == "recording":
             tip = "Dictate — Listening…\nClick tray icon or floating pill to stop"

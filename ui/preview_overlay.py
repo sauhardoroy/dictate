@@ -231,10 +231,10 @@ class PreviewOverlay(QWidget):
         words = self._display_words
         num_words = len(words)
 
-        font_normal = QFont("Segoe UI", 10)
+        font_normal = theme.get_font(10, QFont.Weight.Normal)
         font_normal.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
 
-        font_active = QFont("Segoe UI", 10, QFont.Weight.DemiBold)
+        font_active = theme.get_font(10, QFont.Weight.DemiBold)
         font_active.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
 
         fm_normal = QFontMetrics(font_normal)

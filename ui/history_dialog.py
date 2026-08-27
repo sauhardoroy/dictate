@@ -266,7 +266,7 @@ class HistoryDialog(QDialog):
 
         # Search Bar
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("🔍 Search transcripts, apps, or keywords…")
+        self.search_input.setPlaceholderText("Search transcripts, apps, or keywords…")
         self.search_input.setClearButtonEnabled(True)
         self.search_input.textChanged.connect(self._on_search)
         root.addWidget(self.search_input)
@@ -341,12 +341,11 @@ class HistoryDialog(QDialog):
 
         total_words = sum(e.word_count for e in all_entries)
         total_entries = len(all_entries)
-        # Speech at ~130 WPM vs typing at ~40 WPM saves ~1.7 minutes per 100 words
         minutes_saved = round((total_words / 40.0) - (total_words / 130.0), 1) if total_words > 0 else 0.0
 
-        self.stat_count_lbl.setText(f"📋 {total_entries} Dictations")
-        self.stat_words_lbl.setText(f"💬 {total_words:,} Words")
-        self.stat_time_lbl.setText(f"⚡ ~{minutes_saved:.0f}m Saved")
+        self.stat_count_lbl.setText(f"{total_entries} Dictations")
+        self.stat_words_lbl.setText(f"{total_words:,} Words")
+        self.stat_time_lbl.setText(f"~{minutes_saved:.0f}m Saved")
 
         if not entries:
             empty_item = QListWidgetItem()
