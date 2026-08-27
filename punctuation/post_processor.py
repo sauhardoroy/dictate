@@ -24,11 +24,35 @@ from punctuation.voice_commands import apply_voice_formatting
 
 
 SYSTEM_PROMPT = (
-    "You are an expert dictation assistant. Your task is to clean up the following speech transcript verbatim. "
-    "Remove minor verbal filler words (um, uh) and fix punctuation and casing. "
-    "CRITICAL REQUIREMENT: Do NOT summarize. Do NOT condense or omit any sentences or ideas. "
-    "Preserve the entire full-length transcript word-for-word. "
-    "DO NOT add conversational filler like 'Here is the text'. Output ONLY the cleaned transcript."
+    """You are a strict, automated dictation processor. Your sole function is to process raw speech transcripts into clean, readable text without altering the speaker's voice.
+
+Follow these exact steps for every input:
+Step 1. Scan the text to identify minor verbal fillers (e.g., "um," "uh") and accidental word repetitions where the speaker lost track (e.g., "I I was", "to the the").
+Step 2. Remove those fillers and accidental repetitions. Do NOT alter the surrounding vocabulary or sentence structure.
+Step 3. Apply correct capitalization and punctuation to make the sentences grammatically sound.
+Step 4. Output the final cleaned text immediately. 
+
+CRITICAL CONSTRAINTS:
+- Preserve Personality and Style: Do not make the text sound more formal. Keep the exact feeling, semantics, and ideas.
+- Complete Preservation: Keep the exact original length. Do not summarize, condense, or omit any ideas.
+- Output Format: Output ONLY the processed text. Never include greetings, reasoning, or formatting wrappers.
+
+EXAMPLES:
+
+Input:
+um so basically uh I I went to the store today and uh they were completely out of milk which was really frustrating because um I I needed it for the recipe.
+
+Output:
+So basically, I went to the store today and they were completely out of milk, which was really frustrating because I needed it for the recipe.
+
+Input:
+the the main issue with the design is uh that it doesn't really scale well when we add um more than like a thousand users because it it just crashes.
+
+Output:
+The main issue with the design is that it doesn't really scale well when we add more than like a thousand users because it just crashes.
+
+Now, process the following input:
+**JUST GIVE THE REFINED TEXT OUTPUT AND NOTHING ELSE. IF YOU GIVE OUT OTHER ADDED RESPONSES THEN SOMEONE WILL DIE BECAUSE GOD SAID SO. THIS IS MATTER OF LIFE AND DEATH**"""
 )
 
 
@@ -134,9 +158,24 @@ def _light_polish(text: str, hotwords_file: str = "hotwords.txt") -> str:
 
 
 def _llm_polish(text: str, settings: dict, hotwords_file: str = "hotwords.txt") -> str:
-    api_key = settings.get("ai_polish_api_key", "").strip()
-    base_url = settings.get("ai_polish_base_url", "https://integrate.api.nvidia.com/v1").strip().rstrip("/")
-    model = settings.get("ai_polish_model", "nvidia/nemotron-3-nano-30b-a3b").strip()
+    provider = str(settings.get("ai_polish_provider", "openrouter")).lower().strip()
+
+    if provider == "openrouter":
+        api_key = (settings.get("ai_polish_api_key_openrouter") or settings.get("ai_polish_api_key", "")).strip()
+        base_url = (settings.get("ai_polish_base_url_openrouter") or settings.get("ai_polish_base_url", "https://openrouter.ai/api/v1")).strip().rstrip("/")
+        model = (settings.get("ai_polish_model_openrouter") or settings.get("ai_polish_model", "minimax/minimax-m3:free")).strip()
+    elif provider == "nvidia":
+        api_key = (settings.get("ai_polish_api_key_nvidia") or settings.get("ai_polish_api_key", "")).strip()
+        base_url = (settings.get("ai_polish_base_url_nvidia") or settings.get("ai_polish_base_url", "https://integrate.api.nvidia.com/v1")).strip().rstrip("/")
+        model = (settings.get("ai_polish_model_nvidia") or settings.get("ai_polish_model", "nvidia/nemotron-3-nano-30b-a3b")).strip()
+    else:
+        api_key = settings.get("ai_polish_api_key", "").strip()
+        base_url = settings.get("ai_polish_base_url", "https://openrouter.ai/api/v1").strip().rstrip("/")
+        model = settings.get("ai_polish_model", "minimax/minimax-m3:free").strip()
+
+    # Fallback to generic api_key if provider-specific is blank
+    if not api_key:
+        api_key = settings.get("ai_polish_api_key", "").strip()
 
     # If no base_url or model, fallback to light polish
     if not base_url or not model:
@@ -145,8 +184,12 @@ def _llm_polish(text: str, settings: dict, hotwords_file: str = "hotwords.txt") 
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "User-Agent": "Dictate/2.0 (NVIDIA-AI)",
+        "User-Agent": "Dictate/2.0",
     }
+    if provider == "openrouter":
+        headers["HTTP-Referer"] = "https://github.com/dictate/dictate"
+        headers["X-Title"] = "Dictate"
+
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
@@ -172,7 +215,7 @@ def _llm_polish(text: str, settings: dict, hotwords_file: str = "hotwords.txt") 
     )
 
     try:
-        # Allow up to 25 seconds for cloud NVIDIA AI inference
+        # Allow up to 25 seconds for cloud AI inference
         with urllib.request.urlopen(req, timeout=25.0) as response:
             result = json.loads(response.read().decode("utf-8"))
             choice = result.get("choices", [{}])[0]
@@ -194,7 +237,7 @@ def _llm_polish(text: str, settings: dict, hotwords_file: str = "hotwords.txt") 
             in_words = len(text.split())
             out_words = len(content.split())
             if in_words >= 15 and out_words < int(in_words * 0.65):
-                log.warning("NVIDIA AI polish truncated text (%d -> %d words); falling back to verbatim", in_words, out_words)
+                log.warning("AI polish truncated text (%d -> %d words); falling back to verbatim", in_words, out_words)
                 return _light_polish(text, hotwords_file=hotwords_file)
 
             return content
@@ -205,8 +248,8 @@ def _llm_polish(text: str, settings: dict, hotwords_file: str = "hotwords.txt") 
             msg = err_data.get("error", {}).get("message") or err_data.get("message") or err_body
         except Exception:
             msg = str(e)
-        log.warning("NVIDIA AI polish API call failed (HTTP %s: %s); using local fallback", e.code, msg)
+        log.warning("AI polish API call failed for %s (HTTP %s: %s); using local fallback", provider, e.code, msg)
         return _light_polish(text)
     except Exception as e:
-        log.warning("NVIDIA AI polish API call failed (%s: %s); using local fallback", type(e).__name__, e)
+        log.warning("AI polish API call failed for %s (%s: %s); using local fallback", provider, type(e).__name__, e)
         return _light_polish(text)

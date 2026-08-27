@@ -95,25 +95,33 @@ class LiquidGlassShader:
     def __init__(self):
         self._cached_w = 0
         self._cached_h = 0
+        self._cached_radius = 0.0
         self._cached_grid = None
 
-    def _build_geometry_grid(self, w: int, h: int):
-        """Precomputes normalized coordinate meshes and capsule distance fields."""
-        if w == self._cached_w and h == self._cached_h and self._cached_grid is not None:
+    def _build_geometry_grid(self, w: int, h: int, corner_radius: float = None):
+        """Precomputes normalized coordinate meshes and rounded-rectangle distance fields."""
+        if corner_radius is None:
+            r = min((w - 1.0) / 2.0, (h - 1.0) / 2.0)
+        else:
+            r = min(float(corner_radius), (w - 1.0) / 2.0, (h - 1.0) / 2.0)
+
+        if w == self._cached_w and h == self._cached_h and abs(r - self._cached_radius) < 1e-3 and self._cached_grid is not None:
             return self._cached_grid
 
         y_idx, x_idx = np.indices((h, w), dtype=np.float32)
-        radius = (h - 1.0) / 2.0
-        cy = (h - 1.0) / 2.0
-        seg_x0 = radius
-        seg_x1 = max(radius, (w - 1.0) - radius)
+        
+        # Distance to rounded rectangle spine box [(r, r), (w - 1 - r, h - 1 - r)]
+        seg_x0 = r
+        seg_x1 = max(r, (w - 1.0) - r)
+        seg_y0 = r
+        seg_y1 = max(r, (h - 1.0) - r)
 
-        # Distance to capsule central spine [(seg_x0, cy), (seg_x1, cy)]
         clamped_x = np.clip(x_idx, seg_x0, seg_x1)
+        clamped_y = np.clip(y_idx, seg_y0, seg_y1)
         dx = x_idx - clamped_x
-        dy = y_idx - cy
+        dy = y_idx - clamped_y
         dist = np.sqrt(dx**2 + dy**2)
-        u = dist / max(1.0, radius)  # Normalized distance: 0 at center, 1 at perimeter
+        u = dist / max(1.0, r)  # Normalized distance: 0 at interior, 1 at perimeter
 
         # Subpixel smoothstep antialiased edge mask
         edge_t = np.clip((1.0 - u) / EDGE_FEATHER, 0.0, 1.0)
@@ -130,13 +138,16 @@ class LiquidGlassShader:
 
         self._cached_w = w
         self._cached_h = h
-        self._cached_grid = (x_idx, y_idx, u, edge_alpha, z0, grad_x, grad_y, radius)
+        self._cached_radius = r
+        self._cached_grid = (x_idx, y_idx, u, edge_alpha, z0, grad_x, grad_y, r)
         return self._cached_grid
 
     def render(self, backdrop: QPixmap, w: int, h: int, dark: bool = True,
                accent_color: QColor = None, ripple_phase: float = 0.0,
                screen_center_delta: tuple[float, float] = None,
-               supersample_factor: int = 2) -> QImage:
+               supersample_factor: int = 2,
+               corner_radius: float = None,
+               black_tint: float = 0.0) -> QImage:
         """Executes Pass 2: High-Definition Fragment shader evaluation over screen backdrop buffer."""
         if w <= 4 or h <= 4:
             return QImage()
@@ -169,7 +180,8 @@ class LiquidGlassShader:
         bg_arr = np.frombuffer(ptr, np.uint8).reshape((render_h, render_w, 4))  # BGRA buffer
 
         # Step 2: Surface Geometry & Undulating Liquid Normal Map (at 2x HD resolution)
-        x_idx, y_idx, u, edge_alpha, z0, grad_x, grad_y, radius = self._build_geometry_grid(render_w, render_h)
+        scaled_r = corner_radius * scale if corner_radius is not None else None
+        x_idx, y_idx, u, edge_alpha, z0, grad_x, grad_y, radius = self._build_geometry_grid(render_w, render_h, scaled_r)
 
         # Dynamic harmonic ripple undulation
         ripple = RIPPLE_AMPLITUDE * np.sin((x_idx / scale) * 0.16 + ripple_phase) * np.cos((y_idx / scale) * 0.20 + ripple_phase * 0.7) * (1.0 - np.clip(u, 0, 1)**2)
@@ -254,6 +266,16 @@ class LiquidGlassShader:
             out_r = out_r * (1.0 - tint_fac) + t_r * tint_fac
             out_g = out_g * (1.0 - tint_fac) + t_g * tint_fac
             out_b = out_b * (1.0 - tint_fac) + t_b * tint_fac
+
+        # Dark blackish obsidian glass tint for recording state
+        if black_tint > 0.0:
+            smoke_r = 10.0
+            smoke_g = 12.0
+            smoke_b = 18.0
+            b_fac = np.clip(black_tint, 0.0, 1.0)
+            out_r = out_r * (1.0 - b_fac * 0.50) + smoke_r * (b_fac * 0.50)
+            out_g = out_g * (1.0 - b_fac * 0.50) + smoke_g * (b_fac * 0.50)
+            out_b = out_b * (1.0 - b_fac * 0.50) + smoke_b * (b_fac * 0.50)
 
         # Multiply color by edge_alpha for proper ARGB32 Premultiplied compositing
         norm_alpha = np.clip(edge_alpha, 0.0, 1.0)

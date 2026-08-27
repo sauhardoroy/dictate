@@ -10,20 +10,36 @@ from dataclasses import dataclass
 # ---------------------------------------------------------------------------
 # 1. PILL GEOMETRY & MORPHING DIMENSIONS
 # ---------------------------------------------------------------------------
-PILL_HEIGHT = 60           # Height in logical pixels (40px = minimal sleek Apple aesthetic)
+PILL_HEIGHT = 60           # Default/baseline height in logical pixels
 
-# Width of each state in logical pixels:
-WIDTH_IDLE = 60            # 40x40 circular glass orb
-WIDTH_RECORDING = 120      # 108x40 horizontal capsule with 5-bar fluid visualizer
-WIDTH_TRANSCRIBING = 60    # 42x40 thinking oval with 3 breathing dots
-WIDTH_INJECTING = 60       # 60x40 circular badge with emerald checkmark
-WIDTH_LOADING = 60         # 60x40 circular orb with rotating arc
-WIDTH_ERROR = 60           # 38x40 circular badge with exclamation mark
+# Geometry of each state in logical pixels (width, height):
+WIDTH_IDLE = 60
+HEIGHT_IDLE = 60
+CORNER_RADIUS_IDLE = 30.0
+
+WIDTH_RECORDING = 310      # Unified width (Spotify-style widget with top 1/3 waves + bottom 2/3 cards)
+HEIGHT_RECORDING = 102      # Increased height for spacious top 1/3 waveforms + bottom 2/3 solitaire deck
+CORNER_RADIUS_RECORDING = 20.0  # Same corner radius as the 60x60 circular idle state
+
+WIDTH_PREVIEW = 310        # Same as recording
+HEIGHT_PREVIEW = 102
+
+WIDTH_TRANSCRIBING = 60
+HEIGHT_TRANSCRIBING = 60
+
+WIDTH_INJECTING = 60
+HEIGHT_INJECTING = 60
+
+WIDTH_LOADING = 60
+HEIGHT_LOADING = 60
+
+WIDTH_ERROR = 60
+HEIGHT_ERROR = 60
 
 # ---------------------------------------------------------------------------
 # 2. MOTION & ANIMATION TIMINGS
 # ---------------------------------------------------------------------------
-MORPH_DURATION_MS = 240    # Duration in milliseconds to morph into a larger state (e.g. Recording)
+MORPH_DURATION_MS = 300    # Duration in milliseconds to morph into a larger state (e.g. Recording)
 EXIT_DURATION_MS = 300     # Duration in milliseconds to morph back to smaller state (e.g. Idle)
 MORPH_OVERSHOOT = 0.8     # QEasingCurve.OutBack overshoot (1.0 = smooth cubic, 1.25 = snappy bouncy)
 
@@ -31,7 +47,7 @@ PULSE_DURATION_MS = 800    # Breathing cycle duration for Transcribing/Loading s
 SHAKE_DURATION_MS = 300    # Error shake animation duration (ms)
 SHAKE_DISTANCE_PX = 5      # Maximum horizontal displacement during error shake (px)
 
-METER_SMOOTHING = 0.10     # Audio level exponential interpolation factor (0.0 = slow, 1.0 = instant)
+METER_SMOOTHING = 0.30     # Audio level exponential interpolation factor (0.0 = slow, 1.0 = instant)
 BACKDROP_UPDATE_MS = 15    # Background screen sampling interval in milliseconds (30ms = ~33 FPS)
 
 # ---------------------------------------------------------------------------
@@ -41,7 +57,8 @@ SYSTEM_RED = ("#B91C1C", "#DC2626")       # Darker bold crimson
 SYSTEM_GREEN = ("#15803D", "#16A34A")     # Darker rich forest emerald
 SYSTEM_TEAL = ("#0369A1", "#0284C7")      # Darker deep sapphire cyan (Idle state)
 SYSTEM_PURPLE = ("#6D28D9", "#7C3AED")    # Darker royal amethyst violet (Transcribing state)
-SYSTEM_PINK = ("#BE123C", "#E11D48")      # Darker deep crimson ruby rose (Recording state)
+SYSTEM_CYAN = ("#0284C7", "#38BDF8")      # Sleek Apple Ice Cyan / Sapphire (Recording state)
+SYSTEM_PINK = ("#BE123C", "#E11D48")      # Rose
 
 SYSTEM_GRAY = ("#475569", "#64748B")      # Darker slate
 SYSTEM_GRAY2 = ("#334155", "#475569")
@@ -70,17 +87,19 @@ BORDER_FOCUS = ("#0284C7", "#0284C7")
 class StateStyle:
     accent: tuple[str, str]     # (light, dark)
     width: int                  # target pill width in logical px at this state
+    height: int                 # target pill height in logical px at this state
     label: str                  # accessible/tooltip text
     morphs: bool                # whether this state triggers a shape/size morph
 
 
 STATES: dict[str, StateStyle] = {
-    "idle":         StateStyle(SYSTEM_TEAL, WIDTH_IDLE, "Dictate", False),
-    "recording":    StateStyle(SYSTEM_PINK, WIDTH_RECORDING, "Listening", True),
-    "transcribing": StateStyle(SYSTEM_PURPLE, WIDTH_TRANSCRIBING, "Thinking", True),
-    "injecting":    StateStyle(SYSTEM_GREEN, WIDTH_INJECTING, "Pasted", True),
-    "loading":      StateStyle(SYSTEM_GRAY, WIDTH_LOADING, "Loading", False),
-    "error":        StateStyle(SYSTEM_RED, WIDTH_ERROR, "Error", False),
+    "idle":         StateStyle(SYSTEM_TEAL, WIDTH_IDLE, HEIGHT_IDLE, "Dictate", False),
+    "recording":    StateStyle(SYSTEM_PINK, WIDTH_RECORDING, HEIGHT_RECORDING, "Listening", True),
+    "preview":      StateStyle(SYSTEM_GRAY2 , WIDTH_PREVIEW, HEIGHT_PREVIEW, "Listening…", True),
+    "transcribing": StateStyle(SYSTEM_PURPLE, WIDTH_TRANSCRIBING, HEIGHT_TRANSCRIBING, "Thinking", True),
+    "injecting":    StateStyle(SYSTEM_GREEN, WIDTH_INJECTING, HEIGHT_INJECTING, "Pasted", True),
+    "loading":      StateStyle(SYSTEM_GRAY, WIDTH_LOADING, HEIGHT_LOADING, "Loading", False),
+    "error":        StateStyle(SYSTEM_RED, WIDTH_ERROR, HEIGHT_ERROR, "Error", False),
 }
 
 

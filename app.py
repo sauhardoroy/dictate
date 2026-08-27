@@ -29,7 +29,6 @@ from punctuation.post_processor import HALLUCINATION_BLOCKLIST, polish
 from punctuation.semantic_vad import get_adaptive_silence_duration
 from punctuation.voice_commands import ACTION_DISPLAY_NAMES, get_action_command
 from ui.pill import Pill
-from ui.preview_overlay import PreviewOverlay
 from ui.tray import TrayIcon
 
 log = get_logger(__name__)
@@ -81,9 +80,6 @@ class DictateApp(QObject):
         self.pill.copy_last_requested.connect(self.copy_last_transcript)
         self.pill.quit_requested.connect(self.quit)
         self.pill.position_changed.connect(self._on_pill_moved)
-
-        self.preview = PreviewOverlay(dark=self.pill._dark)
-        self.pill.geometry_changed.connect(self._reposition_preview)
 
         self.streaming_engine = SherpaStreamingEngine()
         model_name = self.settings.get("streaming_model", "zipformer-70M")
@@ -281,13 +277,9 @@ class DictateApp(QObject):
         except Exception:
             pass
 
-    def _reposition_preview(self):
-        if hasattr(self, "preview") and self.preview is not None:
-            self.preview.reposition(self.pill.geometry())
-
     def _on_audio_chunk(self, chunk: np.ndarray):
         """Streaming real-time acoustic chunk ingestion (<5ms latency)."""
-        if not self.settings.get("show_interim_preview", True) or self.state != "recording":
+        if not self.settings.get("show_interim_preview", True) or self.state not in ("recording", "preview"):
             return
         if not self.streaming_engine.is_available():
             return
@@ -296,7 +288,7 @@ class DictateApp(QObject):
         if text:
             self.sig.interim_text.emit(text)
             # Update adaptive silence duration live from streaming text
-            if self.recorder and self.state == "recording":
+            if self.recorder and self.state in ("recording", "preview"):
                 base_sec = float(self.settings.get("vad_silence_seconds", 1.4))
                 adaptive_sec = get_adaptive_silence_duration(text, base_silence_seconds=base_sec)
                 self.recorder.update_silence_duration(adaptive_sec)
@@ -307,7 +299,7 @@ class DictateApp(QObject):
             return
         if self.streaming_engine.is_available():
             return  # Streaming engine handles live preview with zero polling lag
-        if not self.engine.is_loaded() or self.state != "recording" or not self.recorder:
+        if not self.engine.is_loaded() or self.state not in ("recording", "preview") or not self.recorder:
             return
 
         audio_snapshot = self.recorder.snapshot()
@@ -331,7 +323,7 @@ class DictateApp(QObject):
                         self.sig.interim_text.emit(raw_text)
 
                         # Update adaptive silence duration from the latest text in the same pass
-                        if self.recorder and self.state == "recording":
+                        if self.recorder and self.state in ("recording", "preview"):
                             base_sec = float(self.settings.get("vad_silence_seconds", 1.4))
                             adaptive_sec = get_adaptive_silence_duration(raw_text, base_silence_seconds=base_sec)
                             self.recorder.update_silence_duration(adaptive_sec)
@@ -344,9 +336,8 @@ class DictateApp(QObject):
 
     @pyqtSlot(str)
     def _on_interim_text(self, text: str):
-        if self.state == "recording" and self.settings.get("show_interim_preview", True):
-            self._reposition_preview()
-            self.preview.set_text(text)
+        if self.state in ("recording", "preview") and self.settings.get("show_interim_preview", True):
+            self.pill.update_preview(text)
 
     def _on_silence_eval(self, audio_snapshot):
         """Asynchronously evaluates semantic thought completion on partial audio to dynamically adapt silence duration."""
@@ -366,7 +357,7 @@ class DictateApp(QObject):
                     text = res.get("text", "")
                     base_sec = float(self.settings.get("vad_silence_seconds", 1.4))
                     adaptive_sec = get_adaptive_silence_duration(text, base_silence_seconds=base_sec)
-                    if self.recorder and self.state == "recording":
+                    if self.recorder and self.state in ("recording", "preview"):
                         self.recorder.update_silence_duration(adaptive_sec)
             except Exception as exc:
                 log.debug("Semantic silence evaluation error: %s", exc)
@@ -408,9 +399,9 @@ class DictateApp(QObject):
         self._esc_hook.register()
         auto_stop = bool(self.settings.get("auto_stop", True))
         rec_msg = "Listening… (Auto-stops on silence)" if auto_stop else "Listening… (Click pill or tray to stop)"
+        self.pill.clear_preview()
         self._set_state("recording", rec_msg)
         self._play_sound("start")
-        self._reposition_preview()
         if self.settings.get("show_interim_preview", True):
             if self.streaming_engine.is_available():
                 self.streaming_engine.start_stream()
@@ -421,8 +412,7 @@ class DictateApp(QObject):
         self._interim_timer.stop()
         if self.streaming_engine.is_available():
             self.streaming_engine.stop_stream()
-        if hasattr(self, "preview") and self.preview is not None:
-            self.preview.hide_animated()
+        self.pill.clear_preview()
         self._unhook_esc()
         audio = self.recorder.stop()
         duration = self.recorder.duration()
@@ -584,11 +574,22 @@ class DictateApp(QObject):
         from ui.onboarding import OnboardingDialog
 
         dlg = OnboardingDialog(
-            trigger_key=self.settings["trigger_key"],
+            trigger_key=self.settings.get("trigger_key", "ctrl+shift+p"),
             model_id=self.settings.get("model", "parakeet-tdt-0.6b-v3"),
         )
         if dlg.exec() == OnboardingDialog.DialogCode.Accepted:
             self.settings["onboarding_completed"] = True
+            
+            # Save any settings configured in the onboarding dialog
+            vals = dlg.values()
+            if "trigger_key" in vals:
+                self.settings["trigger_key"] = vals["trigger_key"]
+                self.hotkeys.key = vals["trigger_key"]
+                try:
+                    self.hotkeys.register()
+                except Exception as exc:
+                    log.error("Failed to register hotkey from onboarding: %s", exc)
+
             log.info("onboarding completed")
 
     # ---- settings / quit --------------------------------------------------
@@ -613,11 +614,6 @@ class DictateApp(QObject):
             if hasattr(self, "streaming_engine") and streaming_changed:
                 new_s_model = vals.get("streaming_model", "nemo-fast-conformer-80ms")
                 threading.Thread(target=lambda: self.streaming_engine.load(new_s_model), daemon=True).start()
-
-            if hasattr(self, "preview") and self.preview:
-                self.preview.set_dark_mode(self.pill._dark)
-                if not self.settings.get("show_interim_preview", True):
-                    self.preview.hide_animated()
 
             # Custom vocabulary is read per-transcription, not baked into the
             # loaded model, so it can be updated live without a reload.
@@ -669,10 +665,8 @@ class DictateApp(QObject):
 
     def quit(self):
         log.info("quitting")
-        if self.state == "recording":
+        if self.state in ("recording", "preview"):
             self._finish_recording(cancel=True)
-        if hasattr(self, "preview") and self.preview is not None:
-            self.preview.hide()
         self._unhook_esc()
         self.hotkeys.unregister()
         QApplication.instance().quit()

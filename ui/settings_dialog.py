@@ -856,52 +856,96 @@ class SettingsDialog(QDialog):
         layout.setContentsMargins(0, 4, 0, 4)
         layout.setSpacing(14)
 
-        card = FrostedCard("NVIDIA AI Cloud Grammar Polish")
+        card = FrostedCard("AI Cloud Grammar & Dictation Polish")
         v = QVBoxLayout()
         v.setSpacing(12)
 
-        self.ai_enable_cb = QCheckBox("Enable NVIDIA Cloud AI Polish (removes filler words and corrects grammar)")
-        self.ai_enable_cb.setChecked(bool(data.get("ai_polish", False)))
+        self.ai_enable_cb = QCheckBox("Enable Cloud AI Polish (removes filler words, cleans repetitions & formats grammar)")
+        self.ai_enable_cb.setChecked(bool(data.get("ai_polish", True)))
         v.addWidget(self.ai_enable_cb)
-
-        notice = QLabel(
-            "Dictate runs 100% offline by default. Enabling this uses NVIDIA's hosted LLMs (NVIDIA NIM). "
-            "Get a free API key at build.nvidia.com."
-        )
-        notice.setStyleSheet("color: #94A3B8; font-size: 11px; line-height: 1.4;")
-        notice.setWordWrap(True)
-        v.addWidget(notice)
 
         form = QFormLayout()
         form.setSpacing(12)
 
-        self.ai_polish_api_key = QLineEdit(data.get("ai_polish_api_key", ""))
-        self.ai_polish_api_key.setPlaceholderText("API Key (nvapi-...)")
+        self.ai_provider = QComboBox()
+        self.ai_provider.addItem("OpenRouter (Free & Fast LLMs — GLM, Llama, Gemini)", "openrouter")
+        self.ai_provider.addItem("NVIDIA NIM Cloud (Build.nvidia.com)", "nvidia")
+        cur_prov = data.get("ai_polish_provider", "openrouter")
+        idx = self.ai_provider.findData(cur_prov)
+        if idx >= 0:
+            self.ai_provider.setCurrentIndex(idx)
+        form.addRow("AI Provider", self.ai_provider)
+
+        self.ai_notice = QLabel("")
+        self.ai_notice.setStyleSheet("color: #94A3B8; font-size: 11px; line-height: 1.4;")
+        self.ai_notice.setWordWrap(True)
+        form.addRow("", self.ai_notice)
+
+        self.ai_polish_api_key = QLineEdit()
         self.ai_polish_api_key.setEchoMode(QLineEdit.EchoMode.Password)
         form.addRow("API Key", self.ai_polish_api_key)
 
-        self.ai_polish_base_url = QLineEdit(data.get("ai_polish_base_url", "https://integrate.api.nvidia.com/v1"))
+        self.ai_polish_base_url = QLineEdit()
         form.addRow("Base URL", self.ai_polish_base_url)
 
         self.ai_polish_model = QComboBox()
         self.ai_polish_model.setEditable(True)
-        nvidia_models = [
-            ("nvidia/nemotron-3-nano-30b-a3b", "nvidia/nemotron-3-nano-30b-a3b"),
-            ("meta/muse-glimmer-30b", "meta/muse-glimmer-30b"),
-        ]
-        for label, val in nvidia_models:
-            self.ai_polish_model.addItem(label, val)
-
-        cur_model = data.get("ai_polish_model", "nvidia/nemotron-3-nano-30b-a3b")
-        idx = self.ai_polish_model.findData(cur_model)
-        if idx >= 0:
-            self.ai_polish_model.setCurrentIndex(idx)
-        else:
-            self.ai_polish_model.setCurrentText(cur_model)
-
         form.addRow("AI Model", self.ai_polish_model)
-        v.addLayout(form)
 
+        # Store initial settings for both providers
+        self._provider_data = {
+            "openrouter": {
+                "key": data.get("ai_polish_api_key_openrouter") or (data.get("ai_polish_api_key", "") if cur_prov == "openrouter" else ""),
+                "url": data.get("ai_polish_base_url_openrouter", "https://openrouter.ai/api/v1"),
+                "model": data.get("ai_polish_model_openrouter", "z-ai/glm-5.2:free"),
+                "models": [
+                    ("z-ai/glm-5.2:free (Recommended Free)", "z-ai/glm-5.2:free"),
+                    ("meta-llama/llama-3.3-70b-instruct:free", "meta-llama/llama-3.3-70b-instruct:free"),
+                    ("google/gemini-2.0-flash-exp:free", "google/gemini-2.0-flash-exp:free"),
+                    ("deepseek/deepseek-chat", "deepseek/deepseek-chat"),
+                ],
+                "placeholder": "API Key (sk-or-v1-...)",
+                "notice": "OpenRouter provides free and fast open-weights LLMs for instant punctuation and verbatim speech cleanup.",
+            },
+            "nvidia": {
+                "key": data.get("ai_polish_api_key_nvidia") or (data.get("ai_polish_api_key", "") if cur_prov == "nvidia" else ""),
+                "url": data.get("ai_polish_base_url_nvidia", "https://integrate.api.nvidia.com/v1"),
+                "model": data.get("ai_polish_model_nvidia", "nvidia/nemotron-3-nano-30b-a3b"),
+                "models": [
+                    ("nvidia/nemotron-3-nano-30b-a3b", "nvidia/nemotron-3-nano-30b-a3b"),
+                    ("meta/llama-3.1-70b-instruct", "meta/llama-3.1-70b-instruct"),
+                ],
+                "placeholder": "API Key (nvapi-...)",
+                "notice": "NVIDIA NIM hosted models at build.nvidia.com for high-throughput speech transcription cleanup.",
+            },
+        }
+
+        def _update_provider_ui(prov: str):
+            info = self._provider_data.get(prov, self._provider_data["openrouter"])
+            self.ai_polish_api_key.setText(info["key"])
+            self.ai_polish_api_key.setPlaceholderText(info["placeholder"])
+            self.ai_polish_base_url.setText(info["url"])
+            self.ai_notice.setText(info["notice"])
+
+            self.ai_polish_model.clear()
+            for label, val in info["models"]:
+                self.ai_polish_model.addItem(label, val)
+            
+            cur_m = info["model"]
+            m_idx = self.ai_polish_model.findData(cur_m)
+            if m_idx >= 0:
+                self.ai_polish_model.setCurrentIndex(m_idx)
+            else:
+                self.ai_polish_model.setCurrentText(cur_m)
+
+        def _on_provider_changed():
+            prov = self.ai_provider.currentData()
+            _update_provider_ui(prov)
+
+        self.ai_provider.currentIndexChanged.connect(_on_provider_changed)
+        _update_provider_ui(cur_prov)
+
+        v.addLayout(form)
         card.layout_box.addLayout(v)
         layout.addWidget(card)
 
@@ -909,7 +953,17 @@ class SettingsDialog(QDialog):
         return page
 
     def values(self) -> dict:
+        cur_prov = self.ai_provider.currentData() or "openrouter"
         cur_model = self.ai_polish_model.currentData() or self.ai_polish_model.currentText().strip()
+        cur_key = self.ai_polish_api_key.text().strip()
+        cur_url = self.ai_polish_base_url.text().strip()
+
+        # Update cached per-provider values
+        if cur_prov in self._provider_data:
+            self._provider_data[cur_prov]["key"] = cur_key
+            self._provider_data[cur_prov]["url"] = cur_url
+            self._provider_data[cur_prov]["model"] = cur_model
+
         return {
             "mode": self.mode.currentData(),
             "trigger_key": self.key_btn.key,
@@ -927,9 +981,16 @@ class SettingsDialog(QDialog):
             "show_interim_preview": self.preview_cb.isChecked(),
             "streaming_model": self.streaming_model.currentData() or self.streaming_model.currentText(),
             "ai_polish": self.ai_enable_cb.isChecked(),
-            "ai_polish_api_key": self.ai_polish_api_key.text().strip(),
-            "ai_polish_base_url": self.ai_polish_base_url.text().strip(),
+            "ai_polish_provider": cur_prov,
+            "ai_polish_api_key": cur_key,
+            "ai_polish_base_url": cur_url,
             "ai_polish_model": cur_model,
+            "ai_polish_api_key_openrouter": self._provider_data["openrouter"]["key"],
+            "ai_polish_base_url_openrouter": self._provider_data["openrouter"]["url"],
+            "ai_polish_model_openrouter": self._provider_data["openrouter"]["model"],
+            "ai_polish_api_key_nvidia": self._provider_data["nvidia"]["key"],
+            "ai_polish_base_url_nvidia": self._provider_data["nvidia"]["url"],
+            "ai_polish_model_nvidia": self._provider_data["nvidia"]["model"],
         }
 
     def _on_save(self):

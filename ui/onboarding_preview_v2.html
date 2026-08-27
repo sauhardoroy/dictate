@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dictate — Onboarding Preview</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  :root{
+    --teal-deep:#0284C7;   --teal-soft:#7DD3FC;
+    --purple-deep:#7C3AED; --purple-soft:#C4B5FD;
+    --green-deep:#16A34A;  --green-soft:#86EFAC;
+    --pink-deep:#E11D48;
+
+    --text-primary:#1D1D1F;
+    --text-secondary:#6E6E73;
+    --text-muted:#9A9AA0;
+
+    --glass-fill: rgba(255,255,255,0.42);
+    --glass-fill-strong: rgba(255,255,255,0.62);
+    --glass-border: rgba(255,255,255,0.55);
+    --hairline: rgba(0,0,0,0.07);
+
+    --radius-outer: 28px;
+    --radius-panel: 18px;
+  }
+
+  *{ box-sizing:border-box; }
+
+  html,body{
+    height:100%; margin:0;
+    background:#EDEDF2;
+    font-family:-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+    color:var(--text-primary);
+    -webkit-font-smoothing:antialiased;
+    overflow:hidden;
+  }
+
+  /* ============ soft, muted desktop wallpaper ============ */
+  .desktop{
+    position:fixed; inset:0;
+    background:
+      radial-gradient(circle at 15% 15%, rgba(196,181,253,0.35), transparent 46%),
+      radial-gradient(circle at 85% 20%, rgba(147,197,253,0.30), transparent 48%),
+      radial-gradient(circle at 75% 88%, rgba(253,186,207,0.28), transparent 46%),
+      radial-gradient(circle at 15% 85%, rgba(186,230,253,0.30), transparent 44%),
+      linear-gradient(160deg,#F1EEF6 0%, #E9ECF3 55%, #E7E9EF 100%);
+  }
+  .blob{
+    position:fixed; border-radius:50%; filter:blur(120px);
+    opacity:.5; will-change:transform;
+    animation: drift 30s ease-in-out infinite alternate;
+  }
+  .blob.b1{ width:460px; height:460px; background:#C4B5FD; top:-160px; left:-120px; }
+  .blob.b2{ width:420px; height:420px; background:#93C5FD; top:5%; right:-140px; animation-delay:-6s; }
+  .blob.b3{ width:440px; height:440px; background:#FBCFE8; bottom:-180px; left:22%; animation-delay:-12s; }
+  @keyframes drift{
+    from{ transform: translate(0,0) scale(1); }
+    to{ transform: translate(30px,-20px) scale(1.08); }
+  }
+
+  /* ============ app window ============ */
+  .window{
+    position:fixed; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    padding:34px;
+  }
+  .app{
+    width:100%; max-width:960px; height:min(650px, 92vh);
+    display:flex;
+    border-radius: var(--radius-outer);
+    background: var(--glass-fill);
+    border:1px solid var(--glass-border);
+    backdrop-filter: blur(50px) saturate(160%);
+    -webkit-backdrop-filter: blur(50px) saturate(160%);
+    box-shadow:
+      0 40px 90px -24px rgba(30,30,50,0.25),
+      inset 0 1px 0 rgba(255,255,255,0.7);
+    overflow:hidden;
+    position:relative;
+  }
+
+  /* ============ sidebar ============ */
+  .sidebar{
+    width:210px; flex:0 0 210px;
+    padding:26px 14px;
+    display:flex; flex-direction:column; gap:2px;
+    border-right:1px solid var(--hairline);
+    background:rgba(255,255,255,0.20);
+  }
+  .brand{ font-size:13px; font-weight:700; color:var(--text-primary); padding:6px 10px 20px; letter-spacing:-0.01em; }
+  .nav-item{
+    display:flex; align-items:center; gap:10px;
+    padding:9px 12px; border-radius:11px;
+    font-size:13.5px; font-weight:500; color:var(--text-secondary);
+    cursor:pointer; position:relative;
+    transition:color .2s ease;
+  }
+  .nav-item svg{ width:16px; height:16px; flex:0 0 auto; opacity:.75; }
+  .nav-item .indicator{
+    position:absolute; inset:0; border-radius:11px;
+    background:radial-gradient(circle at 20% 50%, rgba(2,132,199,0.16), rgba(2,132,199,0.05) 70%);
+    opacity:0; transition:opacity .25s ease;
+  }
+  .nav-item.active{ color:var(--teal-deep); font-weight:600; }
+  .nav-item.active svg{ opacity:1; }
+  .nav-item.active .indicator{ opacity:1; }
+  .nav-item span{ position:relative; z-index:1; }
+  .nav-item svg{ position:relative; z-index:1; }
+
+  /* ============ main content ============ */
+  .main{ flex:1; min-width:0; display:flex; flex-direction:column; padding:26px 34px 24px; position:relative; }
+
+  .scenes{ position:relative; flex:1; min-height:0; }
+  .scene{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column;
+    opacity:0; transform:translateY(10px);
+    pointer-events:none;
+    transition:opacity .45s cubic-bezier(.22,1,.36,1), transform .45s cubic-bezier(.22,1,.36,1);
+  }
+  .scene.active{ opacity:1; transform:translateY(0); pointer-events:auto; }
+
+  /* dark hero panel (welcome_hero / step icons / ready_hero asset slot) */
+  .hero{
+    height:220px; border-radius:20px; flex:0 0 220px;
+    position:relative; overflow:hidden;
+    background:linear-gradient(160deg,#0E1524 0%, #060A14 100%);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 18px 40px -18px rgba(0,0,0,0.35);
+  }
+  .hero .rings{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+  .hero .ring{ position:absolute; border-radius:50%; border:1px solid var(--ring-color, rgba(56,189,248,0.28)); }
+  .hero .ring.r1{ width:170px; height:170px; }
+  .hero .ring.r2{ width:230px; height:230px; }
+  .hero .ring.r3{ width:290px; height:290px; }
+  .hero .ring.r4{ width:350px; height:350px; opacity:.6; }
+
+  .wave{ position:absolute; inset:0; display:flex; align-items:center; justify-content:space-between; padding:0 26px; z-index:0; }
+  .wave .side{ display:flex; align-items:center; gap:3px; height:60px; }
+  .wave .bar{ width:2.5px; border-radius:2px; background:var(--wave-color, rgba(125,211,252,0.55)); }
+
+  .orb{
+    width:94px; height:94px; border-radius:50%; position:relative; z-index:2;
+    display:flex; align-items:center; justify-content:center;
+    background: radial-gradient(circle at 32% 26%, rgba(255,255,255,0.55), rgba(255,255,255,0.02) 55%),
+                linear-gradient(160deg, var(--orb-a, rgba(56,189,248,0.5)), var(--orb-b, rgba(2,132,199,0.25)));
+    border:1px solid rgba(255,255,255,0.3);
+    box-shadow:
+      inset 0 2px 10px rgba(255,255,255,0.4),
+      inset 0 -14px 26px var(--orb-shadow, rgba(2,132,199,0.4)),
+      0 16px 40px -12px var(--orb-glow, rgba(2,132,199,0.55));
+    animation: orbPulse 3.6s ease-in-out infinite;
+  }
+  @keyframes orbPulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.035); } }
+  .orb svg{ width:30px; height:30px; position:relative; z-index:2; }
+  .sparkle{ position:absolute; width:6px; height:6px; background:#fff; border-radius:50%; filter:blur(0.4px); opacity:0; animation: sparkle 3s ease-in-out infinite; }
+  .sparkle.s1{ top:28%; left:32%; animation-delay:.2s; }
+  .sparkle.s2{ bottom:24%; right:30%; animation-delay:1.6s; }
+  @keyframes sparkle{ 0%,100%{ opacity:0; transform:scale(.4); } 50%{ opacity:1; transform:scale(1); } }
+
+  /* content below hero */
+  .content-body{ flex:1; min-height:0; overflow:auto; padding-top:22px; display:flex; flex-direction:column; gap:16px; }
+
+  h1.title, h2.title{ font-size:22px; font-weight:700; letter-spacing:-0.015em; margin:0 0 6px; color:var(--text-primary); }
+  p.desc{ font-size:13.5px; line-height:1.55; color:var(--text-secondary); margin:0; max-width:480px; }
+
+  .divider{ height:1px; background:var(--hairline); margin:2px 0; }
+
+  .row{ display:flex; align-items:center; justify-content:space-between; padding:2px 0; }
+  .row .l .t{ font-size:13.5px; font-weight:600; color:var(--text-primary); }
+  .row .l .s{ font-size:12px; color:var(--text-muted); margin-top:1px; }
+
+  .toggle{
+    width:44px; height:26px; border-radius:999px; position:relative; cursor:pointer;
+    background:rgba(0,0,0,0.12); transition:background .25s ease; flex:0 0 auto;
+  }
+  .toggle::after{
+    content:""; position:absolute; top:2px; left:2px; width:22px; height:22px; border-radius:50%;
+    background:#fff; box-shadow:0 2px 5px rgba(0,0,0,0.25); transition:transform .25s cubic-bezier(.34,1.56,.64,1);
+  }
+  .toggle.on{ background:linear-gradient(180deg,var(--teal-soft),var(--teal-deep)); }
+  .toggle.on::after{ transform:translateX(18px); }
+
+  .chip-row{ display:flex; gap:10px; flex-wrap:wrap; }
+  .chip{
+    display:flex; align-items:center; gap:6px;
+    padding:8px 14px; border-radius:999px;
+    background:var(--glass-fill-strong); border:1px solid var(--hairline);
+    font-size:12.5px; font-weight:500; color:var(--text-primary);
+  }
+  .chip svg{ width:11px; height:11px; opacity:.6; }
+
+  .pill-badge{
+    display:inline-flex; align-items:center; gap:6px; width:fit-content;
+    padding:6px 13px 6px 10px; border-radius:999px;
+    background:var(--glass-fill-strong); border:1px solid var(--hairline);
+    font-size:12px; font-weight:600; color:var(--text-secondary);
+  }
+  .pill-badge .dot{ width:6px; height:6px; border-radius:50%; background:var(--green-deep); box-shadow:0 0 6px rgba(22,163,74,0.5); }
+
+  .card{
+    background:var(--glass-fill-strong); border:1px solid var(--hairline);
+    border-radius:var(--radius-panel); padding:13px 15px;
+  }
+  .perm-row{ display:flex; align-items:center; gap:12px; }
+  .perm-icon{ width:34px; height:34px; border-radius:10px; flex:0 0 auto; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.04); }
+  .perm-icon svg{ width:16px; height:16px; }
+  .status-chip{
+    font-size:10.5px; font-weight:700; padding:4px 9px; border-radius:999px;
+    color:var(--green-deep); background:rgba(22,163,74,0.12); border:1px solid rgba(22,163,74,0.22);
+  }
+
+  .track{ height:6px; border-radius:999px; background:rgba(0,0,0,0.08); overflow:hidden; margin-top:8px; }
+  .track .fill{ height:100%; width:0%; border-radius:999px; background:linear-gradient(90deg,var(--purple-deep),var(--pink-deep)); transition:width 3s cubic-bezier(.22,1,.36,1); }
+  .cap{ font-size:11px; color:var(--text-muted); margin-top:8px; }
+
+  .steps-row{ display:flex; justify-content:space-between; position:relative; }
+  .thread{ position:absolute; top:22px; left:15%; right:15%; height:1px; background:linear-gradient(90deg, transparent, rgba(0,0,0,0.14), transparent); }
+  .step{ flex:1; display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center; opacity:0; transform:translateY(8px); animation:stepIn .5s ease forwards; }
+  .step:nth-child(2){ animation-delay:.12s; } .step:nth-child(3){ animation-delay:.24s; } .step:nth-child(4){ animation-delay:.36s; }
+  @keyframes stepIn{ to{ opacity:1; transform:translateY(0); } }
+  .step-badge{ width:44px; height:44px; border-radius:50%; background:var(--glass-fill-strong); border:1px solid var(--hairline); display:flex; align-items:center; justify-content:center; }
+  .step-badge svg{ width:18px; height:18px; }
+  .step .t{ font-size:12.5px; font-weight:600; }
+  .step .s{ font-size:11px; color:var(--text-muted); max-width:100px; line-height:1.3; }
+
+  .tip-row{ display:flex; align-items:center; gap:10px; padding:9px 0; }
+  .tip-row + .tip-row{ border-top:1px solid var(--hairline); }
+  .tip-icon{ width:24px; height:24px; border-radius:7px; background:rgba(0,0,0,0.04); display:flex; align-items:center; justify-content:center; flex:0 0 auto; }
+  .tip-icon svg{ width:12px; height:12px; }
+  .tip-row .txt{ font-size:12.5px; color:var(--text-secondary); }
+
+  .nav-row{ display:flex; align-items:center; justify-content:space-between; margin-top:16px; }
+  .btn{ appearance:none; border:none; cursor:pointer; font-family:inherit; font-weight:600; font-size:13.5px; padding:11px 22px; border-radius:14px; transition:transform .16s cubic-bezier(.34,1.56,.64,1), filter .2s ease; }
+  .btn:active{ transform:scale(0.97); }
+  .btn-primary{ color:#fff; background:linear-gradient(180deg,var(--teal-soft),var(--teal-deep)); box-shadow:0 10px 20px -8px rgba(2,132,199,0.5); }
+  .btn-primary.ready{ background:linear-gradient(180deg,var(--green-soft),var(--green-deep)); box-shadow:0 10px 20px -8px rgba(22,163,74,0.5); }
+  .btn-primary:hover{ filter:brightness(1.05); }
+  .btn-ghost{ color:var(--text-secondary); background:rgba(0,0,0,0.045); }
+  .btn-ghost:hover{ color:var(--text-primary); background:rgba(0,0,0,0.08); }
+</style>
+</head>
+<body>
+
+<div class="desktop"></div>
+<div class="blob b1"></div>
+<div class="blob b2"></div>
+<div class="blob b3"></div>
+
+<div class="window">
+  <div class="app">
+
+    <div class="sidebar">
+      <div class="brand">Dictate</div>
+      <div class="nav-item active" id="nav-0" onclick="goTo(0)"><div class="indicator"></div><svg viewBox="0 0 24 24" fill="none"><path d="M3 11l9-7 9 7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 10v9a1 1 0 001 1h4v-6h4v6h4a1 1 0 001-1v-9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Welcome</span></div>
+      <div class="nav-item" id="nav-1" onclick="goTo(1)"><div class="indicator"></div><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Setup</span></div>
+      <div class="nav-item" id="nav-2" onclick="goTo(2)"><div class="indicator"></div><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="M10 8.5l6 3.5-6 3.5z" fill="currentColor"/></svg><span>Get Started</span></div>
+    </div>
+
+    <div class="main">
+      <div class="scenes">
+
+        <!-- ================= SCENE 1: WELCOME ================= -->
+        <div class="scene active" id="scene-0">
+          <div class="hero" style="--ring-color:rgba(56,189,248,0.28); --wave-color:rgba(125,211,252,0.55); --orb-a:rgba(125,211,252,0.55); --orb-b:rgba(2,132,199,0.3); --orb-shadow:rgba(2,132,199,0.45); --orb-glow:rgba(2,132,199,0.6);">
+            <div class="rings"><div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div><div class="ring r4"></div></div>
+            <div class="wave"><div class="side" id="wave-l-0"></div><div class="side" id="wave-r-0"></div></div>
+            <div class="sparkle s1"></div><div class="sparkle s2"></div>
+            <div class="orb"><svg viewBox="0 0 24 32" fill="none"><rect x="7" y="1" width="10" height="16" rx="5" fill="#fff"/><path d="M2 14a10 10 0 0020 0" stroke="#fff" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="24" x2="12" y2="30" stroke="#fff" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="30" x2="18" y2="30" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></div>
+          </div>
+
+          <div class="content-body">
+            <div>
+              <h1 class="title">Meet Dictate</h1>
+              <p class="desc">Speak naturally, anywhere on your Mac. Dictate turns your voice into clean, formatted text — instantly, and entirely offline.</p>
+            </div>
+            <div class="divider"></div>
+            <span class="pill-badge"><span class="dot"></span>Private by design — nothing leaves your Mac</span>
+          </div>
+
+          <div class="nav-row" style="justify-content:flex-end;">
+            <button class="btn btn-primary" onclick="goTo(1)">Continue</button>
+          </div>
+        </div>
+
+        <!-- ================= SCENE 2: SETUP ================= -->
+        <div class="scene" id="scene-1">
+          <div class="hero" style="--ring-color:rgba(167,139,250,0.28); --wave-color:rgba(196,181,253,0.5); --orb-a:rgba(196,181,253,0.55); --orb-b:rgba(124,58,237,0.3); --orb-shadow:rgba(124,58,237,0.45); --orb-glow:rgba(124,58,237,0.55);">
+            <div class="rings"><div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div></div>
+            <div class="orb"><svg viewBox="0 0 24 24" fill="none"><rect x="5" y="10" width="14" height="10" rx="2.5" stroke="#fff" stroke-width="2"/><path d="M8 10V7a4 4 0 018 0v3" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></div>
+          </div>
+
+          <div class="content-body">
+            <div>
+              <h2 class="title">Set Up Dictate</h2>
+              <p class="desc">A couple of permissions and Dictate is ready to listen.</p>
+            </div>
+
+            <div class="card perm-row">
+              <div class="perm-icon"><svg viewBox="0 0 24 24" fill="none"><rect x="8" y="2" width="8" height="13" rx="4" stroke="#0284C7" stroke-width="1.6"/><path d="M4 11a8 8 0 0016 0" stroke="#0284C7" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+              <div style="flex:1;"><div class="row"><span style="font-size:13.5px;font-weight:600;">Microphone Access</span></div><div style="font-size:12px;color:var(--text-muted);">Needed so Dictate can hear you speak</div></div>
+              <span class="status-chip">Granted</span>
+            </div>
+
+            <div class="card perm-row">
+              <div class="perm-icon"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="13" rx="2.5" stroke="#7C3AED" stroke-width="1.6"/><line x1="8" y1="21" x2="16" y2="21" stroke="#7C3AED" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+              <div style="flex:1;"><div style="font-size:13.5px;font-weight:600;">Accessibility Access</div><div style="font-size:12px;color:var(--text-muted);">Lets Dictate type into any app for you</div></div>
+              <div class="toggle" onclick="toggleSwitch(this)"></div>
+            </div>
+
+            <div class="card">
+              <div class="row"><span style="font-size:13px;font-weight:600;">Downloading Local Model</span><span id="modelPct" style="font-size:12px;font-weight:700;color:var(--purple-deep);">0%</span></div>
+              <div class="track"><div class="fill" id="modelFill"></div></div>
+              <div class="cap" id="modelCap">Preparing &nbsp;|&nbsp; Model: Parakeet TDT 0.6B &nbsp;|&nbsp; ~250MB</div>
+            </div>
+          </div>
+
+          <div class="nav-row">
+            <button class="btn btn-ghost" onclick="goTo(0)">Back</button>
+            <button class="btn btn-primary" onclick="goTo(2)">Continue</button>
+          </div>
+        </div>
+
+        <!-- ================= SCENE 3: GET STARTED ================= -->
+        <div class="scene" id="scene-2">
+          <div class="hero" style="--ring-color:rgba(74,222,128,0.28); --wave-color:rgba(134,239,172,0.5); --orb-a:rgba(134,239,172,0.55); --orb-b:rgba(22,163,74,0.3); --orb-shadow:rgba(22,163,74,0.45); --orb-glow:rgba(22,163,74,0.55);">
+            <div class="rings"><div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div></div>
+            <div class="orb"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+
+          <div class="content-body">
+            <div>
+              <h2 class="title">You're All Set</h2>
+              <p class="desc">Here's how Dictate works, in three steps.</p>
+            </div>
+
+            <div class="steps-row">
+              <div class="thread"></div>
+              <div class="step"><div class="step-badge"><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="4" stroke="#0284C7" stroke-width="1.6"/></svg></div><div class="t">Press ⌘⇧D</div><div class="s">From anywhere</div></div>
+              <div class="step"><div class="step-badge"><svg viewBox="0 0 24 24" fill="none"><rect x="2" y="10" width="2.5" height="4" rx="1.2" fill="#7C3AED"/><rect x="7" y="6" width="2.5" height="12" rx="1.2" fill="#7C3AED"/><rect x="12" y="3" width="2.5" height="18" rx="1.2" fill="#7C3AED"/><rect x="17" y="7" width="2.5" height="10" rx="1.2" fill="#7C3AED"/></svg></div><div class="t">Speak naturally</div><div class="s">Like talking to a person</div></div>
+              <div class="step"><div class="step-badge"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7" stroke="#16A34A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="t">Text appears</div><div class="s">In any app</div></div>
+            </div>
+
+            <div class="card" style="padding:0;">
+              <div style="padding:11px 15px;" class="tip-row"><div class="tip-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3l2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z" stroke="#0284C7" stroke-width="1.4" stroke-linejoin="round"/></svg></div><div class="txt">Works inside any app — Mail, Slack, Notes, your browser</div></div>
+              <div style="padding:11px 15px;" class="tip-row"><div class="tip-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z" stroke="#16A34A" stroke-width="1.4" stroke-linejoin="round"/></svg></div><div class="txt">AI Cleanup tidies grammar and filler words automatically</div></div>
+            </div>
+
+            <div class="card row">
+              <div class="l"><div class="t">AI Cleanup</div><div class="s">Polish transcripts automatically</div></div>
+              <div class="toggle on" onclick="toggleSwitch(this)"></div>
+            </div>
+          </div>
+
+          <div class="nav-row">
+            <button class="btn btn-ghost" onclick="goTo(1)">Back</button>
+            <button class="btn btn-primary ready" onclick="finish(event)">Start Dictating</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const total = 3;
+  let current = 0;
+
+  function goTo(i){
+    document.getElementById('scene-'+current).classList.remove('active');
+    document.getElementById('nav-'+current).classList.remove('active');
+    current = i;
+    document.getElementById('scene-'+current).classList.add('active');
+    document.getElementById('nav-'+current).classList.add('active');
+    if(i === 1) runModelDownload();
+  }
+
+  function toggleSwitch(el){ el.classList.toggle('on'); }
+
+  let modelStarted = false;
+  function runModelDownload(){
+    if(modelStarted) return;
+    modelStarted = true;
+    const fill = document.getElementById('modelFill');
+    const pct = document.getElementById('modelPct');
+    const cap = document.getElementById('modelCap');
+    requestAnimationFrame(()=>{ fill.style.width = '100%'; });
+    let p = 0;
+    const iv = setInterval(()=>{
+      p += 4;
+      if(p >= 100){ p = 100; clearInterval(iv); cap.textContent = 'Ready  |  Model: Parakeet TDT 0.6B  |  Loaded'; }
+      pct.textContent = p + '%';
+    }, 3000/25);
+  }
+
+  function finish(e){
+    const btn = e.target;
+    btn.textContent = 'Welcome to Dictate';
+    btn.style.pointerEvents = 'none';
+  }
+
+  // build waveform bars for welcome hero
+  function buildWave(id, count){
+    const el = document.getElementById(id);
+    for(let i=0;i<count;i++){
+      const bar = document.createElement('div');
+      bar.className = 'bar';
+      const h = 8 + Math.random()*44 * Math.sin((i/count)*Math.PI);
+      bar.style.height = Math.max(6,h) + 'px';
+      el.appendChild(bar);
+    }
+  }
+  buildWave('wave-l-0', 14);
+  buildWave('wave-r-0', 14);
+</script>
+
+</body>
+</html>

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dictate Liquid Glass Playground</title>
+  <style>
+    :root { --canvas:#f8fafc; --surface:#ffffff; --elevated:#f1f5f9; --text:#1d1d1f; --muted:#6e6e73; --accent:#0284c7; --pill-text:#ffffff; --selected-text:#0369a1; --blur:16px; --lens:1.25; --rim:.55; --radius:22px; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-width:320px; color:var(--text); font:14px/1.45 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif; background:var(--canvas); }
+    button,input,select { font:inherit; }
+    .app { min-height:100vh; display:grid; grid-template-columns:320px minmax(0,1fr); }
+    .controls { position:sticky; top:0; height:100vh; overflow:auto; padding:28px 24px; border-right:1px solid color-mix(in srgb,var(--text) 9%,transparent); background:color-mix(in srgb,var(--surface) 72%,transparent); }
+    h1 { margin:0; font-size:17px; letter-spacing:-.02em; } .intro { margin:7px 0 28px; color:var(--muted); font-size:13px; }
+    fieldset { margin:0 0 24px; padding:0; border:0; } legend { margin-bottom:10px; color:var(--muted); font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+    .control { display:grid; grid-template-columns:1fr 48px; gap:10px; align-items:center; margin:12px 0; } .control label { font-size:13px; }
+    .control output { color:var(--muted); text-align:right; font-variant-numeric:tabular-nums; font-size:12px; }
+    input[type="color"] { width:100%; height:34px; padding:2px; border:1px solid color-mix(in srgb,var(--text) 13%,transparent); border-radius:8px; background:var(--surface); cursor:pointer; }
+    input[type="range"] { grid-column:1 / -1; accent-color:var(--accent); width:100%; margin-top:-4px; }
+    .buttons { display:flex; gap:8px; } .secondary { min-height:38px; padding:0 13px; border:1px solid color-mix(in srgb,var(--text) 14%,transparent); border-radius:999px; background:var(--surface); color:var(--text); cursor:pointer; }
+    .secondary:hover { background:var(--elevated); } button:focus-visible,input:focus-visible,select:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    .workspace { min-width:0; padding:32px clamp(24px,5vw,72px); display:flex; flex-direction:column; gap:18px; }
+    .workspace-head { display:flex; align-items:center; justify-content:space-between; gap:16px; } .workspace-head h2 { margin:0; font-size:20px; letter-spacing:-.025em; } .workspace-head p { margin:4px 0 0; color:var(--muted); }
+    .mode { appearance:none; border:1px solid color-mix(in srgb,var(--text) 13%,transparent); border-radius:999px; padding:8px 28px 8px 12px; background:var(--surface); color:var(--text); }
+    .preview-wrap { flex:1; display:grid; place-items:center; padding:28px; border-radius:28px; background:radial-gradient(circle at 18% 8%,color-mix(in srgb,var(--accent) 17%,transparent),transparent 30%), var(--elevated); }
+    .window { width:min(900px,100%); min-height:560px; overflow:hidden; display:grid; grid-template-columns:190px minmax(0,1fr); border:1px solid color-mix(in srgb,var(--text) 9%,transparent); border-radius:var(--radius); background:var(--canvas); box-shadow:0 22px 50px color-mix(in srgb,var(--text) 13%,transparent); }
+    .rail { padding:26px 18px; background:color-mix(in srgb,var(--elevated) 82%,var(--surface)); } .brand { margin:0 0 18px 10px; font-size:14px; font-weight:700; }
+    .nav { display:grid; gap:4px; } .nav-item { width:100%; min-height:40px; display:flex; align-items:center; gap:11px; padding:0 12px; color:var(--muted); border:0; border-radius:12px; background:transparent; text-align:left; cursor:pointer; }
+    .nav-item::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; flex:none; }.nav-item.active { color:var(--selected-text); background:linear-gradient(145deg,color-mix(in srgb,var(--surface) 58%,transparent),color-mix(in srgb,var(--accent) 9%,transparent)); border:1px solid color-mix(in srgb,var(--surface) 62%,transparent); box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 84%,transparent), 0 8px 22px color-mix(in srgb,var(--accent) 9%,transparent); backdrop-filter:blur(var(--blur)); }
+    .page { padding:34px 42px 30px; display:flex; flex-direction:column; } .hero { height:184px; display:grid; place-items:center; overflow:hidden; border-radius:22px; background:linear-gradient(135deg,color-mix(in srgb,var(--surface) 92%,var(--accent)),var(--elevated)); border:1px solid color-mix(in srgb,#fff 65%,transparent); }
+    .orb { position:relative; width:90px; height:90px; border-radius:50%; background:radial-gradient(circle at 32% 25%,rgba(255,255,255,.86),rgba(255,255,255,.25) 26%,color-mix(in srgb,var(--accent) 17%,transparent) 65%,transparent 72%); border:1px solid color-mix(in srgb,#fff calc(var(--rim) * 100%),transparent); box-shadow:inset -10px -12px 20px color-mix(in srgb,var(--accent) 12%,transparent), inset 9px 9px 16px rgba(255,255,255,.6), 0 14px 28px color-mix(in srgb,var(--accent) 16%,transparent); backdrop-filter:blur(calc(var(--blur) * var(--lens))); }
+    .orb::after { content:""; position:absolute; inset:28px 38px 25px; border:2px solid var(--pill-text); border-radius:8px 8px 10px 10px; } .orb::before { content:""; position:absolute; left:33px; top:44px; width:22px; height:16px; border:2px solid var(--pill-text); border-top:0; border-radius:0 0 14px 14px; }
+    .content { margin-top:24px; max-width:530px; } .content h3 { margin:0; font-size:22px; letter-spacing:-.03em; line-height:1.2; } .content p { margin:8px 0 0; color:var(--muted); }
+    .status { margin-top:16px; color:var(--muted); font-size:13px; } .status::before { content:""; display:inline-block; width:7px; height:7px; margin:0 8px 1px 0; border-radius:50%; background:var(--accent); }
+    .actions { margin-top:auto; padding-top:26px; display:flex; justify-content:flex-end; gap:10px; }.pill { min-height:40px; padding:0 18px; border-radius:999px; font-weight:650; cursor:pointer; }.pill.secondary { background:color-mix(in srgb,var(--surface) 74%,transparent); }.pill.primary { color:var(--pill-text); border:1px solid color-mix(in srgb,#fff 55%,transparent); background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 88%,#fff),var(--accent)); box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 8px 18px color-mix(in srgb,var(--accent) 22%,transparent); backdrop-filter:blur(var(--blur)); }.pill.primary:hover { transform:translateY(-1px); }.pill:active { transform:translateY(1px); }
+    .preset { margin:0; padding:12px; max-height:134px; overflow:auto; border-radius:10px; color:var(--muted); background:color-mix(in srgb,var(--elevated) 76%,transparent); font:11px/1.5 ui-monospace,Consolas,monospace; white-space:pre-wrap; }
+    @media (max-width:760px) { .app { display:block; }.controls { position:static; height:auto; border-right:0; border-bottom:1px solid color-mix(in srgb,var(--text) 9%,transparent); }.workspace { padding:24px 16px; }.window { grid-template-columns:1fr; min-height:530px; }.rail { padding:14px 16px; }.brand { display:none; }.nav { grid-template-columns:repeat(3,1fr); }.nav-item { justify-content:center; padding:0 8px; font-size:12px; }.page { padding:24px; }.preview-wrap { padding:12px; } }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <aside class="controls" aria-label="Liquid glass controls">
+      <h1>Liquid Glass Playground</h1><p class="intro">Tune the live onboarding preview. Every setting updates immediately.</p>
+      <fieldset><legend>Colour</legend>
+        <div class="control"><label for="accent">Accent</label><input id="accent" data-var="--accent" type="color" value="#0284c7"></div>
+        <div class="control"><label for="text">Body text</label><input id="text" data-var="--text" type="color" value="#1d1d1f"></div>
+        <div class="control"><label for="pill-text">Primary pill text</label><input id="pill-text" data-var="--pill-text" type="color" value="#ffffff"></div>
+        <div class="control"><label for="selected-text">Selected step text</label><input id="selected-text" data-var="--selected-text" type="color" value="#0369a1"></div>
+        <div class="control"><label for="muted">Secondary text</label><input id="muted" data-var="--muted" type="color" value="#6e6e73"></div>
+      </fieldset>
+      <fieldset><legend>Optics</legend>
+        <div class="control"><label for="blur">Glass blur</label><output for="blur">16px</output><input id="blur" data-var="--blur" data-unit="px" type="range" min="0" max="32" value="16"></div>
+        <div class="control"><label for="lens">Lens thickness</label><output for="lens">1.25</output><input id="lens" data-var="--lens" data-unit="" type="range" min="0.8" max="2" step="0.05" value="1.25"></div>
+        <div class="control"><label for="rim">Rim intensity</label><output for="rim">55%</output><input id="rim" data-var="--rim" data-unit="" data-percent type="range" min="0" max="1" step="0.05" value="0.55"></div>
+        <div class="control"><label for="radius">Window radius</label><output for="radius">22px</output><input id="radius" data-var="--radius" data-unit="px" type="range" min="12" max="32" value="22"></div>
+      </fieldset>
+      <fieldset><legend>Preset</legend><pre class="preset" id="preset" aria-live="polite"></pre><div class="buttons"><button class="secondary" id="copy">Copy preset</button><button class="secondary" id="reset">Reset</button></div></fieldset>
+    </aside>
+    <section class="workspace" aria-label="Preview">
+      <header class="workspace-head"><div><h2>Onboarding preview</h2><p>Use the page selector to inspect every liquid surface.</p></div><select class="mode" id="mode" aria-label="Theme"><option value="light">Light theme</option><option value="dark">Dark theme</option></select></header>
+      <div class="preview-wrap"><section class="window" aria-label="Dictate onboarding window"><nav class="rail" aria-label="Onboarding sections"><p class="brand">Dictate</p><div class="nav"><button class="nav-item active" data-page="Welcome">Welcome</button><button class="nav-item" data-page="Setup">Setup</button><button class="nav-item" data-page="Get Started">Get Started</button></div></nav><article class="page"><div class="hero"><div class="orb" aria-hidden="true"></div></div><div class="content"><h3 id="title">Dictate, wherever you write.</h3><p id="description">Hold a shortcut, speak, and Dictate places clean text at your cursor.</p><p class="status" id="status">Speech recognition stays on your device.</p></div><div class="actions"><button class="pill secondary" id="back">Back</button><button class="pill primary" id="primary">Continue</button></div></article></section></div>
+    </section>
+  </main>
+  <script>
+    const root=document.documentElement, defaults={accent:'#0284c7',text:'#1d1d1f','pill-text':'#ffffff','selected-text':'#0369a1',muted:'#6e6e73',blur:'16',lens:'1.25',rim:'0.55',radius:'22'};
+    const pages={Welcome:['Dictate, wherever you write.','Hold a shortcut, speak, and Dictate places clean text at your cursor.','Speech recognition stays on your device.','Continue'],Setup:['A few essentials.','Set the shortcut you’ll use to start dictating.','Local speech model is ready for offline transcription.','Continue'],'Get Started':['Ready when you are.','Focus a text field, hold your shortcut, then speak naturally.','Polish transcripts is enabled.','Start Dictating']};
+    function updatePreset(){const values={};document.querySelectorAll('[data-var]').forEach(el=>values[el.id]=el.value);document.querySelector('#preset').textContent=JSON.stringify(values,null,2)}
+    document.querySelectorAll('[data-var]').forEach(el=>el.addEventListener('input',()=>{const unit=el.dataset.unit??'';root.style.setProperty(el.dataset.var,el.value+unit);const output=el.parentElement.querySelector('output');if(output)output.value=el.dataset.percent?`${Math.round(el.value*100)}%`:`${el.value}${unit}`;updatePreset()}));
+    document.querySelectorAll('.nav-item').forEach(button=>button.addEventListener('click',()=>{document.querySelector('.nav-item.active').classList.remove('active');button.classList.add('active');const [title,description,status,action]=pages[button.dataset.page];document.querySelector('#title').textContent=title;document.querySelector('#description').textContent=description;document.querySelector('#status').textContent=status;document.querySelector('#primary').textContent=action;}));
+    document.querySelector('#mode').addEventListener('change',e=>{const dark=e.target.value==='dark';const colors=dark?{canvas:'#090d16',surface:'#131b2e',elevated:'#1e293b',text:'#f8fafc',muted:'#94a3b8'}:{canvas:'#f8fafc',surface:'#ffffff',elevated:'#f1f5f9',text:'#1d1d1f',muted:'#6e6e73'};for(const [name,value] of Object.entries(colors)){root.style.setProperty(`--${name}`,value);const input=document.querySelector(`#${name}`);if(input){input.value=value;}}updatePreset();});
+    document.querySelector('#copy').addEventListener('click',async()=>{await navigator.clipboard.writeText(document.querySelector('#preset').textContent);document.querySelector('#copy').textContent='Copied';setTimeout(()=>document.querySelector('#copy').textContent='Copy preset',1200)});
+    document.querySelector('#reset').addEventListener('click',()=>{for(const [id,value] of Object.entries(defaults)){const input=document.querySelector(`#${id}`);input.value=value;input.dispatchEvent(new Event('input'));}document.querySelector('#mode').value='light';document.querySelector('#mode').dispatchEvent(new Event('change'));});
+    updatePreset();
+  </script>
+</body>
+</html>
