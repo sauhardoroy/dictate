@@ -897,9 +897,9 @@ class SettingsDialog(QDialog):
             "openrouter": {
                 "key": data.get("ai_polish_api_key_openrouter") or (data.get("ai_polish_api_key", "") if cur_prov == "openrouter" else ""),
                 "url": data.get("ai_polish_base_url_openrouter", "https://openrouter.ai/api/v1"),
-                "model": data.get("ai_polish_model_openrouter", "z-ai/glm-5.2:free"),
+                "model": data.get("ai_polish_model_openrouter", "minimax/minimax-m3:free"),
                 "models": [
-                    ("z-ai/glm-5.2:free (Recommended Free)", "z-ai/glm-5.2:free"),
+                    ("minimax/minimax-m3:free (Recommended Free)", "minimax/minimax-m3:free"),
                     ("meta-llama/llama-3.3-70b-instruct:free", "meta-llama/llama-3.3-70b-instruct:free"),
                     ("google/gemini-2.0-flash-exp:free", "google/gemini-2.0-flash-exp:free"),
                     ("deepseek/deepseek-chat", "deepseek/deepseek-chat"),
