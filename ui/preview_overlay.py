@@ -1,20 +1,21 @@
 """The floating always-on-top live transcript preview overlay.
 
 Displays a real-time, free-flowing 4-word sliding window as words are spoken:
-the active (latest) word is highlighted, while previous words gently fade.
+the active (latest) word is displayed in bold on_surface text, while previous
+words gently fade in on_surface_variant / on_surface_muted.
 """
+from __future__ import annotations
+
 import ctypes
 from ctypes import wintypes
 import sys
 
 from PyQt6.QtCore import (
     QEasingCurve,
-    QPoint,
     QPointF,
     QRect,
     QRectF,
     Qt,
-    QTimer,
     QVariantAnimation,
 )
 from PyQt6.QtGui import (
@@ -27,8 +28,13 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import QApplication, QWidget
 
-from ui import theme
-from ui.pill import _is_windows_dark_mode
+from ui.material_theme import (
+    FONT_FAMILY,
+    MOTION,
+    Tokens,
+    get_tokens,
+    is_system_dark_mode,
+)
 
 GWL_EXSTYLE = -20
 WS_EX_NOACTIVATE = 0x08000000
@@ -74,7 +80,7 @@ class PreviewOverlay(QWidget):
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
 
-        self._dark = _is_windows_dark_mode() if dark is None else dark
+        self._dark = is_system_dark_mode() if dark is None else dark
         self._opacity = 0.0
         self._target_pos = None
         self._is_showing = False
@@ -158,7 +164,7 @@ class PreviewOverlay(QWidget):
         self.show()
         self._apply_native_flags()
 
-        self._fade_anim.setDuration(theme.DURATION_CROSSFADE)
+        self._fade_anim.setDuration(MOTION["standard"])
         self._fade_anim.setStartValue(self._opacity)
         self._fade_anim.setEndValue(1.0)
         self._fade_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
@@ -169,7 +175,7 @@ class PreviewOverlay(QWidget):
             return
         self._is_showing = False
         self._fade_anim.stop()
-        self._fade_anim.setDuration(theme.DURATION_FEEDBACK)
+        self._fade_anim.setDuration(MOTION["fast"])
         self._fade_anim.setStartValue(self._opacity)
         self._fade_anim.setEndValue(0.0)
         self._fade_anim.setEasingCurve(QEasingCurve.Type.InCubic)
@@ -188,6 +194,8 @@ class PreviewOverlay(QWidget):
         if self._opacity <= 0.001 or not self._display_words:
             return
 
+        t = get_tokens(self._dark)
+
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         p.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
@@ -200,34 +208,33 @@ class PreviewOverlay(QWidget):
         path = QPainterPath()
         path.addRoundedRect(rect, r, r)
 
-        # Background Translucent Surface
-        if self._dark:
-            bg_color = QColor(15, 23, 42, int(225 * self._opacity))
-            border_color = QColor(255, 255, 255, int(28 * self._opacity))
-            dot_color = QColor(225, 29, 72, int(220 * self._opacity))
-            active_glow = QColor(225, 29, 72, int(40 * self._opacity))
-        else:
-            bg_color = QColor(255, 255, 255, int(235 * self._opacity))
-            border_color = QColor(0, 0, 0, int(25 * self._opacity))
-            dot_color = QColor(190, 18, 60, int(220 * self._opacity))
-            active_glow = QColor(190, 18, 60, int(35 * self._opacity))
+        # Background Flat Surface Fill + Outline (scaled with opacity)
+        bg_col = QColor(t.surface_container_low)
+        bg_col.setAlphaF(min(1.0, 0.95 * self._opacity))
+        border_col = QColor(t.outline)
+        border_col.setAlphaF(min(1.0, 0.70 * self._opacity))
 
-        p.fillPath(path, bg_color)
-        p.strokePath(path, QPen(border_color, 1.0))
+        p.fillPath(path, bg_col)
+        p.strokePath(path, QPen(border_col, 1.0))
 
-        # Left mic indicator dot
+        # Left mic indicator dot in reserved signal_recording tone
+        dot_col = QColor(t.signal_recording)
+        dot_col.setAlphaF(min(1.0, self._opacity))
         dot_cx = 15.0
         dot_cy = h / 2.0
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(dot_color)
+        p.setBrush(dot_col)
         p.drawEllipse(QPointF(dot_cx, dot_cy), 2.5, 2.5)
 
-        # Draw 4 words with progressive fade and active highlight
+        # Draw 4 words with progressive opacity fade
         words = self._display_words
         num_words = len(words)
 
-        font_normal = theme.get_font(10, QFont.Weight.Normal)
-        font_active = theme.get_font(10, QFont.Weight.DemiBold)
+        font_normal = QFont("Segoe UI Variable Display", 9)
+        font_normal.setWeight(QFont.Weight.Normal)
+
+        font_active = QFont("Segoe UI Variable Display", 9)
+        font_active.setWeight(QFont.Weight.DemiBold)
 
         fm_normal = QFontMetrics(font_normal)
         fm_active = QFontMetrics(font_active)
@@ -247,31 +254,29 @@ class PreviewOverlay(QWidget):
             is_latest = (dist_from_latest == 0)
 
             if is_latest:
-                word_color = QColor(255, 255, 255, int(255 * self._opacity)) if self._dark else QColor(15, 23, 42, int(255 * self._opacity))
+                w_col = QColor(t.on_surface)
+                w_col.setAlphaF(min(1.0, self._opacity))
                 p.setFont(font_active)
             elif dist_from_latest == 1:
-                word_color = QColor(203, 213, 225, int(190 * self._opacity)) if self._dark else QColor(71, 85, 105, int(190 * self._opacity))
+                w_col = QColor(t.on_surface_variant)
+                w_col.setAlphaF(min(1.0, 0.85 * self._opacity))
                 p.setFont(font_normal)
             elif dist_from_latest == 2:
-                word_color = QColor(148, 163, 184, int(130 * self._opacity)) if self._dark else QColor(100, 116, 139, int(130 * self._opacity))
+                w_col = QColor(t.on_surface_muted)
+                w_col.setAlphaF(min(1.0, 0.65 * self._opacity))
                 p.setFont(font_normal)
             else:
-                word_color = QColor(100, 116, 139, int(80 * self._opacity)) if self._dark else QColor(148, 163, 184, int(80 * self._opacity))
+                w_col = QColor(t.on_surface_muted)
+                w_col.setAlphaF(min(1.0, 0.45 * self._opacity))
                 p.setFont(font_normal)
 
             ww = word_widths[i]
-
-            if is_latest and self._opacity > 0.1:
-                pill_pad_x = 4.0
-                pill_rect = QRectF(cur_x - pill_pad_x, (h - 20.0) / 2.0, ww + pill_pad_x * 2, 20.0)
-                p_path = QPainterPath()
-                p_path.addRoundedRect(pill_rect, 4.0, 4.0)
-                p.fillPath(p_path, active_glow)
-
-            p.setPen(word_color)
+            p.setPen(w_col)
             p.drawText(
                 QRectF(cur_x, 0, ww + 1.0, h),
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                 word,
             )
             cur_x += ww + space_w
+
+        p.end()

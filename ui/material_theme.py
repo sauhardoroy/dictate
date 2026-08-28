@@ -49,6 +49,11 @@ class Tokens:
     error: str
     on_error: str
 
+    # HUD state signaling — monochrome + reserved signal tones
+    signal_recording: str   # dark: "#C9A98E"  light: "#9C7A5C"
+    signal_error: str       # dark: "#C99C9C"  light: "#9C6B6B"
+    on_signal: str          # dark: "#141416"  light: "#FAFAFA"
+
     # Overlay + shadow
     scrim: str
     shadow: str
@@ -78,6 +83,9 @@ class Tokens:
             on_success="#0F1F12",
             error="#E5A2A2",
             on_error="#2A0E0E",
+            signal_recording="#C9A98E",
+            signal_error="#C99C9C",
+            on_signal="#141416",
             scrim="rgba(0, 0, 0, 0.55)",
             shadow="rgba(0, 0, 0, 0.45)",
         )
@@ -107,9 +115,67 @@ class Tokens:
             on_success="#FFFFFF",
             error="#8E3B3B",
             on_error="#FFFFFF",
+            signal_recording="#9C7A5C",
+            signal_error="#9C6B6B",
+            on_signal="#FAFAFA",
             scrim="rgba(0, 0, 0, 0.32)",
             shadow="rgba(0, 0, 0, 0.16)",
         )
+
+
+def is_system_dark_mode() -> bool:
+    """Detect OS dark mode across Windows, macOS, and Linux."""
+    import sys
+    if sys.platform == "win32":
+        try:
+            import winreg
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+            )
+            value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+            winreg.CloseKey(key)
+            return value == 0
+        except Exception:
+            return True
+    elif sys.platform == "darwin":
+        try:
+            from PyQt6.QtWidgets import QApplication
+            from PyQt6.QtCore import Qt
+            hints = QApplication.styleHints()
+            if hasattr(hints, "colorScheme"):
+                return hints.colorScheme() == Qt.ColorScheme.Dark
+        except Exception:
+            pass
+    return True
+
+
+def get_tokens(dark: bool = None) -> Tokens:
+    """Get active Tokens instance based on explicit flag or OS dark mode."""
+    if dark is None:
+        dark = is_system_dark_mode()
+    return Tokens.dark() if dark else Tokens.light()
+
+
+@dataclass(frozen=True)
+class StateSpec:
+    width: int
+    height: int
+    label: str
+    accessible_name: str
+
+
+HUD_STATES: Dict[str, StateSpec] = {
+    "idle": StateSpec(60, 60, "Ready", "Dictate Ready"),
+    "recording": StateSpec(320, 74, "Listening…", "Dictate Listening"),
+    "preview": StateSpec(320, 74, "Listening…", "Dictate Listening"),
+    "transcribing": StateSpec(130, 52, "Processing…", "Dictate Processing"),
+    "injecting": StateSpec(120, 52, "Inserted", "Dictate Text Inserted"),
+    "loading": StateSpec(60, 60, "Loading…", "Dictate Loading"),
+    "error": StateSpec(60, 60, "Error", "Dictate Error"),
+}
+
+STATES = HUD_STATES
 
 
 # --------------------------------------------------------------------------

@@ -1,20 +1,28 @@
 """System tray icon with monochrome styling and status badges."""
+from __future__ import annotations
+
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QAction, QColor, QIcon, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
 
-from ui import theme
+from ui.material_theme import (
+    HUD_STATES,
+    Tokens,
+    build_qss,
+    get_tokens,
+)
 
 
-def draw_icon(badge_color: str = None) -> QIcon:
+def draw_icon(badge_color: str = None, dark: bool = True) -> QIcon:
     """Draw a clean monochrome microphone tray icon with optional status badge."""
+    t = get_tokens(dark)
     pm = QPixmap(64, 64)
     pm.fill(Qt.GlobalColor.transparent)
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-    # Base microphone glyph in crisp white/light-gray
-    p.setPen(QPen(QColor("#F8FAFC"), 3.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    # Base microphone glyph in on_surface tone
+    p.setPen(QPen(QColor(t.on_surface), 3.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
     p.setBrush(Qt.BrushStyle.NoBrush)
 
     # Mic body
@@ -25,9 +33,9 @@ def draw_icon(badge_color: str = None) -> QIcon:
     p.drawLine(32, 42, 32, 49)
     p.drawLine(24, 49, 40, 49)
 
-    # Status badge (if active state)
+    # Status badge (if active signal state)
     if badge_color:
-        p.setPen(QPen(QColor("#0F172A"), 1.8))
+        p.setPen(QPen(QColor(t.surface_dim), 1.8))
         p.setBrush(QColor(badge_color))
         p.drawEllipse(44, 10, 14, 14)
 
@@ -47,7 +55,8 @@ class TrayIcon(QSystemTrayIcon):
         self.setToolTip("Dictate — Ready")
 
         menu = QMenu()
-        menu.setStyleSheet(theme.get_dialog_stylesheet(dark=True))
+        t = get_tokens(dark=True)
+        menu.setStyleSheet(build_qss(t))
 
         self.act_record = QAction("Start Dictation", self)
         self.act_record.triggered.connect(self.toggle_requested.emit)
@@ -81,16 +90,15 @@ class TrayIcon(QSystemTrayIcon):
             pass
 
     def set_status(self, state: str, detail: str = ""):
-        badge = {
-            "recording": "#E11D48",
-            "preview": "#E11D48",
-            "transcribing": "#A855F7",
-            "injecting": "#30D158",
-            "loading": "#94A3B8",
-            "error": "#DC2626",
-        }.get(state, None)
+        t = get_tokens(dark=True)
+        # Exactly one reserved signal tone for recording and one for error; others are pure monochrome (no badge)
+        badge = None
+        if state in ("recording", "preview"):
+            badge = t.signal_recording
+        elif state == "error":
+            badge = t.signal_error
 
-        self.setIcon(draw_icon(badge))
+        self.setIcon(draw_icon(badge, dark=True))
 
         if hasattr(self, "act_record"):
             if state in ("recording", "preview"):
@@ -99,7 +107,7 @@ class TrayIcon(QSystemTrayIcon):
                 self.act_record.setText("Start Dictation")
 
         # Stable state vocabulary
-        label = theme.STATES.get(state, theme.STATES["idle"]).label
+        label = HUD_STATES.get(state, HUD_STATES["idle"]).label
         if state in ("recording", "preview"):
             tip = "Dictate — Listening…\nClick tray icon or floating pill to stop"
             if detail:

@@ -29,7 +29,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from ui import theme
+from ui.material_theme import Tokens, get_tokens, build_qss
 from ui.history_dialog import HistoryDialog
 from ui.onboarding import HeroStage, OnboardingDialog, OnboardingShell
 from ui.pill import Pill

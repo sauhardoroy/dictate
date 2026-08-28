@@ -1,9 +1,11 @@
-"""Transcript History Dialog: search, stat counters, rich card view, copy feedback, and export."""
+"""Transcript History Dialog: Material 3 Monochrome search, stat counters, rich card view, and export."""
+from __future__ import annotations
+
 import json
 import os
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QFont
+from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QDialog,
     QFileDialog,
@@ -21,7 +23,15 @@ from PyQt6.QtWidgets import (
 
 from history.manager import HistoryManager, TranscriptRecord
 from injection.typer import copy_to_clipboard, paste_text
-from ui import theme
+from ui.material_theme import (
+    FONT_FAMILY,
+    Shape,
+    Tokens,
+    build_qss,
+    get_tokens,
+    is_system_dark_mode,
+)
+from ui.widgets import StatusPill, make_button, make_card, make_label
 
 
 class TranscriptCardWidget(QFrame):
@@ -30,52 +40,41 @@ class TranscriptCardWidget(QFrame):
     deleted = pyqtSignal(str)
     reinject_requested = pyqtSignal(str)
 
-    def __init__(self, record: TranscriptRecord, target_hwnd: int = 0, dark: bool = True, parent=None):
+    def __init__(self, record: TranscriptRecord, target_hwnd: int = 0, dark: bool = None, parent=None):
         super().__init__(parent)
         self.record = record
         self.target_hwnd = target_hwnd
-        self.dark = dark
+        self.dark = is_system_dark_mode() if dark is None else dark
+        self.t = get_tokens(self.dark)
 
-        card_bg = theme.pick(theme.SURFACE_CARD, dark)
-        border_subtle = theme.pick(theme.BORDER_SUBTLE, dark)
-        accent = theme.pick(theme.SYSTEM_BLUE, dark)
-
+        self.setProperty("role", "card")
         self.setStyleSheet(f"""
             TranscriptCardWidget {{
-                background-color: {card_bg};
-                border: 1px solid {border_subtle};
-                border-radius: 10px;
+                background-color: {self.t.surface_container_low};
+                border: 1px solid {self.t.outline_variant};
+                border-radius: {Shape.LG}px;
             }}
             TranscriptCardWidget:hover {{
-                border-color: {accent};
+                border-color: {self.t.outline};
+                background-color: {self.t.surface_container};
             }}
         """)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(8)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(10)
 
         # Header row: timestamp, app badge, duration/words, actions
         header_row = QHBoxLayout()
         header_row.setSpacing(8)
 
         time_lbl = QLabel(record.formatted_time())
-        time_lbl.setFont(theme.get_font(11, QFont.Weight.Bold))
-        time_lbl.setStyleSheet(f"color: {accent};")
+        time_lbl.setProperty("role", "label")
+        time_lbl.setStyleSheet(f"color: {self.t.on_surface_variant}; font-weight: 600;")
         header_row.addWidget(time_lbl)
 
         if record.target_app:
-            app_badge = QLabel(record.target_app)
-            app_badge.setFont(theme.get_font(10, QFont.Weight.DemiBold))
-            elevated = theme.pick(theme.SURFACE_ELEVATED, dark)
-            border_strong = theme.pick(theme.BORDER_STRONG, dark)
-            app_badge.setStyleSheet(f"""
-                color: {theme.pick(theme.TEXT_SECONDARY, dark)};
-                background-color: {elevated};
-                border: 1px solid {border_strong};
-                border-radius: 4px;
-                padding: 1px 6px;
-            """)
+            app_badge = StatusPill(record.target_app, tone="neutral", dot=False)
             header_row.addWidget(app_badge)
 
         if record.duration_s > 0 or record.word_count > 0:
@@ -85,42 +84,27 @@ class TranscriptCardWidget(QFrame):
             if record.duration_s > 0:
                 info_text.append(f"{record.duration_s:.1f}s")
             stats_lbl = QLabel(" • ".join(info_text))
-            stats_lbl.setFont(theme.get_font(10, QFont.Weight.Normal))
-            stats_lbl.setStyleSheet(f"color: {theme.pick(theme.TEXT_MUTED, dark)};")
+            stats_lbl.setProperty("role", "caption")
+            stats_lbl.setStyleSheet(f"color: {self.t.on_surface_muted};")
             header_row.addWidget(stats_lbl)
 
         header_row.addStretch()
 
         # Action Buttons
-        self.btn_copy = QPushButton("Copy")
-        self.btn_copy.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_copy = make_button("Copy", variant="secondary")
         self.btn_copy.setFixedHeight(28)
         self.btn_copy.clicked.connect(self._copy_text)
         header_row.addWidget(self.btn_copy)
 
         insert_label = f"Insert in {record.target_app}" if record.target_app else "Insert at Cursor"
-        self.btn_paste = QPushButton(insert_label)
-        self.btn_paste.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_paste = make_button(insert_label, variant="secondary")
         self.btn_paste.setFixedHeight(28)
         self.btn_paste.clicked.connect(self._reinject_text)
         header_row.addWidget(self.btn_paste)
 
-        btn_del = QPushButton("×")
+        btn_del = make_button("Delete", variant="text")
+        btn_del.setFixedHeight(28)
         btn_del.setToolTip("Delete entry")
-        btn_del.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_del.setStyleSheet("""
-            QPushButton {
-                background: transparent;
-                color: #94A3B8;
-                border: none;
-                font-size: 16px;
-                font-weight: bold;
-                padding: 0 6px;
-            }
-            QPushButton:hover {
-                color: #EF4444;
-            }
-        """)
         btn_del.clicked.connect(lambda: self.deleted.emit(self.record.id))
         header_row.addWidget(btn_del)
 
@@ -128,31 +112,19 @@ class TranscriptCardWidget(QFrame):
 
         # Body: Transcript Text
         text_lbl = QLabel(record.text)
-        text_lbl.setFont(theme.get_font(13, QFont.Weight.Normal))
-        text_lbl.setStyleSheet(f"color: {theme.pick(theme.TEXT_PRIMARY, dark)}; line-height: 1.4;")
+        text_lbl.setProperty("role", "body")
+        text_lbl.setStyleSheet(f"color: {self.t.on_surface};")
         text_lbl.setWordWrap(True)
         text_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(text_lbl)
 
     def _copy_text(self):
         copy_to_clipboard(self.record.text)
-        self.btn_copy.setText("✓ Copied")
-        self.btn_copy.setStyleSheet("""
-            QPushButton {
-                background-color: #16A34A;
-                color: #FFFFFF;
-                border: none;
-                border-radius: 6px;
-                padding: 3px 12px;
-                font-size: 11px;
-                font-weight: bold;
-            }
-        """)
+        self.btn_copy.setText("Copied")
         QTimer.singleShot(1500, self._reset_copy_btn)
 
     def _reset_copy_btn(self):
         self.btn_copy.setText("Copy")
-        self.btn_copy.setStyleSheet("")
 
     def _reinject_text(self):
         self.reinject_requested.emit(self.record.text)
@@ -161,66 +133,63 @@ class TranscriptCardWidget(QFrame):
 class HistoryDialog(QDialog):
     """Full-featured modal window to search, review, copy, and export past dictations."""
 
-    def __init__(self, history_manager: HistoryManager, target_hwnd: int = 0, dark: bool = True, parent=None):
+    def __init__(self, history_manager: HistoryManager, target_hwnd: int = 0, dark: bool = None, parent=None):
         super().__init__(parent)
         self.history = history_manager
         self.target_hwnd = target_hwnd
-        self.dark = dark
+        self.dark = is_system_dark_mode() if dark is None else dark
+        self.t = get_tokens(self.dark)
 
         self.setWindowTitle("Dictate — Transcript History")
         self.setMinimumSize(660, 540)
         self.resize(720, 600)
-        self.setStyleSheet(theme.get_dialog_stylesheet(dark=self.dark))
+        self.setStyleSheet(build_qss(self.t))
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(22, 20, 22, 18)
+        root.setContentsMargins(24, 24, 24, 20)
         root.setSpacing(14)
 
-        # Header Title & Summary
+        # Header Title & Subtitle
         top_bar = QHBoxLayout()
         header_text = QVBoxLayout()
         header_text.setSpacing(3)
-        title = QLabel("Transcript History")
-        title.setFont(theme.get_font(20, QFont.Weight.Bold))
-        title.setStyleSheet(f"color: {theme.pick(theme.TEXT_PRIMARY, self.dark)};")
+        title = make_label("Transcript History", role="headline")
         header_text.addWidget(title)
 
-        subtitle = QLabel("Review, copy, or export your recent voice typing records.")
-        subtitle.setFont(theme.get_font(12, QFont.Weight.Normal))
-        subtitle.setStyleSheet(f"color: {theme.pick(theme.TEXT_SECONDARY, self.dark)};")
+        subtitle = make_label("Review, copy, or export your recent voice typing records.", role="body_sm")
         header_text.addWidget(subtitle)
         top_bar.addLayout(header_text)
         top_bar.addStretch()
-
         root.addLayout(top_bar)
 
         # Stats Dashboard Strip
-        self.stats_container = QFrame()
-        card_bg = theme.pick(theme.SURFACE_CARD, self.dark)
-        border_subtle = theme.pick(theme.BORDER_SUBTLE, self.dark)
+        self.stats_container = make_card(self.t)
         self.stats_container.setStyleSheet(f"""
-            QFrame {{
-                background-color: {card_bg};
-                border: 1px solid {border_subtle};
-                border-radius: 8px;
+            QFrame[role="card"] {{
+                background-color: {self.t.surface_container_low};
+                border: 1px solid {self.t.outline_variant};
+                border-radius: {Shape.MD}px;
                 padding: 6px 14px;
             }}
         """)
         stats_layout = QHBoxLayout(self.stats_container)
-        stats_layout.setContentsMargins(8, 4, 8, 4)
+        stats_layout.setContentsMargins(12, 6, 12, 6)
 
         self.stat_count_lbl = QLabel()
-        self.stat_count_lbl.setStyleSheet(f"color: {theme.pick(theme.SYSTEM_CYAN, self.dark)}; font-weight: bold;")
+        self.stat_count_lbl.setProperty("role", "label")
+        self.stat_count_lbl.setStyleSheet(f"color: {self.t.on_surface_variant}; font-weight: 600;")
         stats_layout.addWidget(self.stat_count_lbl)
         stats_layout.addStretch()
 
         self.stat_words_lbl = QLabel()
-        self.stat_words_lbl.setStyleSheet(f"color: {theme.pick(theme.SYSTEM_GREEN, self.dark)}; font-weight: bold;")
+        self.stat_words_lbl.setProperty("role", "label")
+        self.stat_words_lbl.setStyleSheet(f"color: {self.t.on_surface_variant}; font-weight: 600;")
         stats_layout.addWidget(self.stat_words_lbl)
         stats_layout.addStretch()
 
         self.stat_time_lbl = QLabel()
-        self.stat_time_lbl.setStyleSheet(f"color: {theme.pick(theme.SYSTEM_PURPLE, self.dark)}; font-weight: bold;")
+        self.stat_time_lbl.setProperty("role", "label")
+        self.stat_time_lbl.setStyleSheet(f"color: {self.t.on_surface_variant}; font-weight: 600;")
         stats_layout.addWidget(self.stat_time_lbl)
 
         root.addWidget(self.stats_container)
@@ -256,36 +225,17 @@ class HistoryDialog(QDialog):
         bottom_bar = QHBoxLayout()
         bottom_bar.setSpacing(10)
 
-        btn_clear = QPushButton("Clear All")
-        btn_clear.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_clear.setStyleSheet("""
-            QPushButton {
-                background: transparent;
-                color: #EF4444;
-                border: 1px solid rgba(239, 68, 68, 0.35);
-                border-radius: 6px;
-                padding: 6px 14px;
-                font-size: 12px;
-                font-weight: 600;
-            }
-            QPushButton:hover {
-                background-color: rgba(239, 68, 68, 0.15);
-                border-color: #EF4444;
-            }
-        """)
+        btn_clear = make_button("Clear All", variant="text")
         btn_clear.clicked.connect(self._clear_all)
         bottom_bar.addWidget(btn_clear)
 
         bottom_bar.addStretch()
 
-        btn_export = QPushButton("Export…")
-        btn_export.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_export = make_button("Export…", variant="secondary")
         btn_export.clicked.connect(self._export_history)
         bottom_bar.addWidget(btn_export)
 
-        btn_close = QPushButton("Done")
-        btn_close.setObjectName("primaryButton")
-        btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_close = make_button("Done", variant="primary")
         btn_close.clicked.connect(self.accept)
         bottom_bar.addWidget(btn_close)
 
@@ -314,7 +264,7 @@ class HistoryDialog(QDialog):
             msg = "No transcripts recorded yet." if not query else "No transcripts match your search."
             empty_widget = QLabel(f"{msg}")
             empty_widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            empty_widget.setStyleSheet(f"color: {theme.pick(theme.TEXT_MUTED, self.dark)}; font-size: 13px; padding: 40px;")
+            empty_widget.setStyleSheet(f"color: {self.t.on_surface_muted}; font-size: 13px; padding: 40px;")
             empty_item.setSizeHint(empty_widget.sizeHint())
             self.list_widget.addItem(empty_item)
             self.list_widget.setItemWidget(empty_item, empty_widget)
