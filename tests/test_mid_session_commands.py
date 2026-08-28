@@ -5,6 +5,7 @@ import pytest
 from audio.capture import Recorder
 from punctuation.voice_commands import (
     detect_mid_session_command,
+    split_on_restart_command,
     strip_continue_command,
     RESTART_COMMANDS,
     CONTINUE_COMMANDS,
@@ -57,6 +58,37 @@ class TestMidSessionCommandDetection:
     def test_embedded_commands_do_not_match(self, phrase):
         """Strict isolation constraint: words appearing mid-sentence as real content must NOT trigger."""
         assert detect_mid_session_command(phrase) is None
+
+
+class TestSplitOnRestartCommand:
+    """Test splitting and discarding speech prior to restart commands."""
+
+    def test_pure_restart_returns_empty_remainder(self):
+        has_restart, rem = split_on_restart_command("start over")
+        assert has_restart is True
+        assert rem == ""
+
+        has_restart, rem = split_on_restart_command("let's start again.")
+        assert has_restart is True
+        assert rem == ""
+
+    def test_speech_followed_by_restart_discards_earlier_speech(self):
+        raw = "We need to cancel the meeting tomorrow and reschedule it start over"
+        has_restart, rem = split_on_restart_command(raw)
+        assert has_restart is True
+        assert rem == ""
+
+    def test_speech_with_restart_and_subsequent_speech(self):
+        raw = "We need to cancel the meeting start over the project is on track for release."
+        has_restart, rem = split_on_restart_command(raw)
+        assert has_restart is True
+        assert rem == "the project is on track for release."
+
+    def test_no_restart_phrase_returns_original(self):
+        raw = "The project is on track for release."
+        has_restart, rem = split_on_restart_command(raw)
+        assert has_restart is False
+        assert rem == raw
 
 
 class TestStripContinueCommand:

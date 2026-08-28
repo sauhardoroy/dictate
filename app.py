@@ -31,6 +31,7 @@ from punctuation.voice_commands import (
     ACTION_DISPLAY_NAMES,
     get_action_command,
     detect_mid_session_command,
+    split_on_restart_command,
     strip_continue_command,
 )
 from context.app_detector import get_active_context, ContextInfo
@@ -217,6 +218,25 @@ class DictateApp(QObject):
             dur = len(audio) / 16000.0
             result["duration_s"] = dur
             log.debug("raw transcript (%d samples): %r", len(audio), raw_text)
+
+            # Pre-filter restart and continue commands before polish
+            if self.settings.get("mid_session_commands", True):
+                has_restart, remaining = split_on_restart_command(raw_text)
+                if has_restart:
+                    if not remaining:
+                        log.info("Transcript was a pure restart command: discarding speech")
+                        result["text"] = ""
+                        self.sig.engine_result.emit(result)
+                        return
+                    else:
+                        log.info("Transcript contained restart command — discarding prior speech (%r -> %r)", raw_text, remaining)
+                        raw_text = remaining
+
+                raw_text = strip_continue_command(raw_text)
+                if not raw_text:
+                    result["text"] = ""
+                    self.sig.engine_result.emit(result)
+                    return
 
             ai_polish_enabled = bool(self.settings.get("ai_polish", False))
             async_polish_enabled = bool(self.settings.get("async_polish", False))
@@ -542,10 +562,15 @@ class DictateApp(QObject):
 
         # Check for mid-session restart command or trailing continue command
         if self.settings.get("mid_session_commands", True):
-            if detect_mid_session_command(text) == "restart":
-                log.info("Final transcript was an isolated restart command — discarding without injecting")
-                self._idle("Restarted")
-                return
+            has_restart, remaining = split_on_restart_command(text)
+            if has_restart:
+                if not remaining:
+                    log.info("Final transcript ended with restart command — discarding without injecting")
+                    self._idle("Restarted")
+                    return
+                else:
+                    text = remaining
+
             text = strip_continue_command(text)
             if not text:
                 self._idle("Nothing recognized")

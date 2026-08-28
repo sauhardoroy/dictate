@@ -96,12 +96,36 @@ CONTINUE_COMMANDS = {
 }
 
 RESTART_PATTERNS = [
-    r"(?i)(?:^|[.,!?;:\n])\s*(?:let's\s+start\s+again|lets\s+start\s+again|start\s+over|scratch\s+that,?\s+start\s+again)[.!?]?\s*$",
+    r"(?i)(?:^|\b)\s*(?:let's\s+start\s+again|lets\s+start\s+again|start\s+over|scratch\s+that,?\s+start\s+again)[.!?]?\s*$",
 ]
 
 CONTINUE_PATTERNS = [
-    r"(?i)(?:^|[.,!?;:\n])\s*(?:continue|keep\s+going|let\s+me\s+continue)[.!?]?\s*$",
+    r"(?i)(?:^|\b)\s*(?:keep\s+going|let\s+me\s+continue|please\s+continue)[.!?]?\s*$",
+    r"(?i)(?:^|[.,!?;:\n])\s*continue[.!?]?\s*$",
 ]
+
+RESTART_SPLIT_PATTERN = re.compile(
+    r"(?i)\b(?:let's\s+start\s+again|lets\s+start\s+again|start\s+over|scratch\s+that,?\s+start\s+again)\b[.!?]?",
+)
+
+
+def split_on_restart_command(text: str) -> Tuple[bool, str]:
+    """Check if text contains a restart command.
+
+    If present:
+        Discards everything prior to and including the last restart phrase.
+        Returns (True, remaining_text_after_last_restart_command)
+    If not present:
+        Returns (False, text)
+    """
+    if not text:
+        return False, ""
+    matches = list(RESTART_SPLIT_PATTERN.finditer(text))
+    if not matches:
+        return False, text
+    last_match = matches[-1]
+    remainder = text[last_match.end():].strip()
+    return True, remainder
 
 
 def detect_mid_session_command(segment_text: str) -> Optional[str]:
