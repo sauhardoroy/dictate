@@ -238,6 +238,12 @@ class DictateApp(QObject):
                     self.sig.engine_result.emit(result)
                     return
 
+            # Fast-path for voice app launch commands (instant launch without cloud LLM overhead)
+            if self.settings.get("voice_app_launch_enabled", True) and match_app_launch_command(raw_text, self.app_registry):
+                result["text"] = raw_text
+                self.sig.engine_result.emit(result)
+                return
+
             ai_polish_enabled = bool(self.settings.get("ai_polish", False))
             async_polish_enabled = bool(self.settings.get("async_polish", False))
 
@@ -399,7 +405,7 @@ class DictateApp(QObject):
 
         threading.Thread(target=_worker, daemon=True).start()
 
-    def _handle_mid_session_command(self, text: str) -> bool:
+    def _handle_mid_session_command(self, text: str, allow_continue: bool = True) -> bool:
         """Evaluate and handle mid-session recording control commands ('restart' or 'continue').
 
         Returns True if a command was matched and handled.
@@ -417,19 +423,23 @@ class DictateApp(QObject):
             self._set_state("recording", "Restarted — listening…")
             self._play_sound("start")
             return True
-        elif cmd == "continue":
-            log.info("Mid-session 'continue' voice command matched: extending silence timer")
+        elif cmd == "continue" and allow_continue:
+            ext_sec = float(self.settings.get("continue_silence_extension", 5.0))
+            log.info("Mid-session 'continue' voice command matched: extending silence timer by +%.1fs", ext_sec)
             if self.recorder:
                 self.recorder.reset_silence_timer()
                 base_sec = float(self.settings.get("vad_silence_seconds", 1.4))
-                self.recorder.update_silence_duration(base_sec + 2.0)
+                self.recorder.update_silence_duration(base_sec + ext_sec)
+            self._continue_command_triggered = True
+            self._set_state("recording", f"Time extended (+{int(ext_sec)}s) — listening…")
+            self._play_sound("start")
             return True
         return False
 
     @pyqtSlot(str)
     def _on_interim_text(self, text: str):
         if self.state in ("recording", "preview"):
-            if self._handle_mid_session_command(text):
+            if self._handle_mid_session_command(text, allow_continue=False):
                 return
             if self.settings.get("show_interim_preview", True):
                 self.pill.update_preview(text)
@@ -475,6 +485,7 @@ class DictateApp(QObject):
         threading.Thread(target=_worker, daemon=True).start()
 
     def _start_recording(self):
+        self._continue_command_triggered = False
         if not self.engine.is_loaded():
             self.pill.set_state("loading", "Model still loading\u2026")
             return
@@ -578,7 +589,8 @@ class DictateApp(QObject):
 
         # Check for voice app launch command (e.g. "open notepad", "please launch calculator")
         if self.settings.get("voice_app_launch_enabled", True):
-            launch_match = match_app_launch_command(text, self.app_registry)
+            raw_text = result.get("raw_text", text)
+            launch_match = match_app_launch_command(text, self.app_registry) or match_app_launch_command(raw_text, self.app_registry)
             if launch_match:
                 alias, exe_path = launch_match
                 display = f"Open {alias.title()}"

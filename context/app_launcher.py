@@ -25,10 +25,23 @@ LAUNCH_PREFIXES = (
 
 def load_app_registry(registry_path: Optional[str] = None) -> Dict[str, str]:
     """Load and validate the app launch registry mapping spoken aliases to executable paths."""
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    default_path = os.path.join(project_root, "config", "app_launch_registry.json")
+
     if not registry_path:
-        # Default to config/app_launch_registry.json relative to project root
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        registry_path = os.path.join(project_root, "config", "app_launch_registry.json")
+        registry_path = default_path
+    elif not os.path.isabs(registry_path):
+        candidates = [
+            os.path.join(project_root, "config", registry_path),
+            os.path.join(project_root, registry_path),
+            os.path.abspath(registry_path),
+        ]
+        for c in candidates:
+            if os.path.isfile(c):
+                registry_path = c
+                break
+        else:
+            registry_path = os.path.join(project_root, "config", registry_path)
 
     registry: Dict[str, str] = {}
     if not os.path.isfile(registry_path):

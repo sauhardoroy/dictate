@@ -169,8 +169,17 @@ def detect_mid_session_command(segment_text: str) -> Optional[str]:
     return None
 
 
+FOLLOWING_NATURAL_WORDS = {
+    "the", "this", "that", "these", "those", "our", "your", "my", "their", "his", "her", "its",
+    "with", "to", "from", "on", "at", "in", "as", "by", "for", "working", "doing", "reading", "writing", "speaking",
+}
+
+
 def strip_continue_command(text: str) -> str:
-    """Remove mid-session and trailing continuation command phrases from transcribed text."""
+    """Remove mid-session and trailing continuation command phrases from transcribed text
+
+    while preserving any natural grammatical usage of the word 'continue'.
+    """
     if not text:
         return ""
 
@@ -186,7 +195,9 @@ def strip_continue_command(text: str) -> str:
         w_bare = re.sub(r"^[^\w']+|[^\w']+$", "", w).lower()
         if w_bare == "continue":
             prev_word = re.sub(r"^[^\w']+|[^\w']+$", "", words[i - 1]).lower() if i > 0 else ""
-            if prev_word in SUBJECT_OR_MODAL_BEFORE:
+            next_word = re.sub(r"^[^\w']+|[^\w']+$", "", words[i + 1]).lower() if i < len(words) - 1 else ""
+            # If preceded by subject/modal or followed by grammatical object/preposition/participle:
+            if prev_word in SUBJECT_OR_MODAL_BEFORE or next_word in FOLLOWING_NATURAL_WORDS:
                 cleaned_words.append(w)
             else:
                 # Strip continuation voice command
