@@ -63,7 +63,7 @@ class ParakeetTDTEngine(ASREngine):
                     word = line.split(":", 1)[0].split("/", 1)[0].strip()
                     word = re.sub(r"[^\w\s\-]", "", word).strip()
                     if word:
-                        clean_lines.append(word.upper())
+                        clean_lines.append(word.lower())
 
             if clean_lines:
                 clean_path = os.path.join(os.path.dirname(raw_path), ".hotwords_sherpa.txt")
@@ -117,21 +117,36 @@ class ParakeetTDTEngine(ASREngine):
             )
         except Exception as exc:
             log.warning("Failed to initialize with provider=%s (%s), falling back to CPU", provider, exc)
-            self.recognizer = sherpa_onnx.OfflineRecognizer.from_transducer(
-                encoder=encoder,
-                decoder=decoder,
-                joiner=joiner,
-                tokens=tokens,
-                num_threads=self.num_threads,
-                sample_rate=16000,
-                feature_dim=80,
-                decoding_method=decoding_method,
-                model_type="nemo_transducer",
-                max_active_paths=4,
-                hotwords_file=hw_path,
-                hotwords_score=self.hotwords_score,
-                provider="cpu",
-            )
+            try:
+                self.recognizer = sherpa_onnx.OfflineRecognizer.from_transducer(
+                    encoder=encoder,
+                    decoder=decoder,
+                    joiner=joiner,
+                    tokens=tokens,
+                    num_threads=self.num_threads,
+                    sample_rate=16000,
+                    feature_dim=80,
+                    decoding_method=decoding_method,
+                    model_type="nemo_transducer",
+                    max_active_paths=4,
+                    hotwords_file=hw_path,
+                    hotwords_score=self.hotwords_score,
+                    provider="cpu",
+                )
+            except Exception as exc2:
+                log.warning("Failed to initialize with hotwords (%s), falling back to greedy search without hotwords", exc2)
+                self.recognizer = sherpa_onnx.OfflineRecognizer.from_transducer(
+                    encoder=encoder,
+                    decoder=decoder,
+                    joiner=joiner,
+                    tokens=tokens,
+                    num_threads=self.num_threads,
+                    sample_rate=16000,
+                    feature_dim=80,
+                    decoding_method="greedy_search",
+                    model_type="nemo_transducer",
+                    provider="cpu",
+                )
 
         self._is_loaded = True
         log.info("Parakeet TDT engine ready (hotwords=%s)", bool(hw_path))

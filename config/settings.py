@@ -159,6 +159,12 @@ def validated_settings(loaded: Any) -> dict:
     for key, value in loaded.items():
         if key in DEFAULTS and _VALIDATORS[key](value):
             result[key] = value
+
+    # Migration: if hotwords_file points to derived .hotwords_sherpa.txt, migrate to canonical hotwords.txt
+    hw = result.get("hotwords_file", "")
+    if isinstance(hw, str) and (hw.endswith(".hotwords_sherpa.txt") or hw.endswith("/.hotwords_sherpa.txt") or hw.endswith(r"\.hotwords_sherpa.txt")):
+        result["hotwords_file"] = "hotwords.txt"
+
     return result
 
 

@@ -67,9 +67,14 @@ _HOTWORDS_MTIME = 0
 def get_hotwords_mapping(hotwords_file: str = "hotwords.txt") -> dict[str, str]:
     """Load hotwords.txt and return a case-correction mapping {lowercase_phrase: CanonicalCase}."""
     global _HOTWORDS_CACHE, _HOTWORDS_MTIME
+    hw_clean = hotwords_file
+    if hw_clean and hw_clean.endswith(".hotwords_sherpa.txt"):
+        hw_clean = hw_clean.replace(".hotwords_sherpa.txt", "hotwords.txt")
+
     candidates = [
+        hw_clean,
         hotwords_file,
-        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), hotwords_file),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), hw_clean),
         os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hotwords.txt"),
         os.path.join(os.path.dirname(sys.executable), "hotwords.txt") if getattr(sys, "frozen", False) else "",
     ]
