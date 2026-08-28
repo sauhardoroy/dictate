@@ -49,6 +49,8 @@ DEFAULTS = {
     "streaming_model": "nemo-fast-conformer-80ms",
     "context_awareness_enabled": True,
     "mid_session_commands": True,
+    "voice_app_launch_enabled": True,
+    "app_launch_registry_file": "app_launch_registry.json",
 }
 
 
@@ -154,6 +156,8 @@ _VALIDATORS = {
     "streaming_model": lambda v: isinstance(v, str) and bool(v.strip()),
     "context_awareness_enabled": _is_bool,
     "mid_session_commands": _is_bool,
+    "voice_app_launch_enabled": _is_bool,
+    "app_launch_registry_file": lambda v: isinstance(v, str) and bool(v.strip()),
 }
 
 

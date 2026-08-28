@@ -33,6 +33,11 @@ from punctuation.voice_commands import (
     detect_mid_session_command,
     strip_continue_command,
 )
+from context.app_launcher import (
+    load_app_registry,
+    match_app_launch_command,
+    launch_registered_app,
+)
 from ui.pill import Pill
 from ui.tray import TrayIcon
 
@@ -77,6 +82,7 @@ class DictateApp(QObject):
         self.sig.interim_text.connect(self._on_interim_text)
 
         self.engine = self._make_engine()
+        self.app_registry = load_app_registry(self.settings.get("app_launch_registry_file"))
 
         self.pill = Pill(x=self.settings.get("pill_x"), y=self.settings.get("pill_y"))
         self.pill.toggle_requested.connect(self.sig.trigger)
@@ -539,6 +545,33 @@ class DictateApp(QObject):
             text = strip_continue_command(text)
             if not text:
                 self._idle("Nothing recognized")
+                return
+
+        # Check for voice app launch command (e.g. "open notepad", "please launch calculator")
+        if self.settings.get("voice_app_launch_enabled", True):
+            launch_match = match_app_launch_command(text, self.app_registry)
+            if launch_match:
+                alias, exe_path = launch_match
+                display = f"Open {alias.title()}"
+                self.last_text = display
+                self._set_state("injecting", display)
+                ok = launch_registered_app(exe_path)
+                if ok:
+                    self.history.add_entry(
+                        text=display,
+                        raw_text=text,
+                        duration_s=result.get("duration_s", 0.0),
+                        target_app=self.target_app_name,
+                        window_title=self.target_window_title,
+                        is_action=True,
+                    )
+                    self._play_sound("success")
+                    log.info("executed voice app launch: alias=%r path=%r", alias, exe_path)
+                    QTimer.singleShot(800, lambda: self._idle(display))
+                else:
+                    self._play_sound("error")
+                    self._set_state("error", f"Launch failed: {alias}")
+                    QTimer.singleShot(2500, lambda: self._idle())
                 return
 
         # Check for action voice command (e.g. "delete that", "select all", "press enter")
