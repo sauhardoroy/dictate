@@ -178,6 +178,67 @@ def _light_polish(text: str, hotwords_file: str = "hotwords.txt") -> str:
     return t
 
 
+CHATBOT_PREAMBLE_PATTERN = re.compile(
+    r"^(?:i cannot|i can't|as an ai|here(?:'s|\s+is)|sure,|certainly,|of course|"
+    r"based on the transcript|i am unable|the current president|i am not able|"
+    r"i'm sorry|as a language model|you can dictate|technical text you can dictate|"
+    r"here is a|here are|to answer your question|the answer is)",
+    re.IGNORECASE
+)
+
+COMMON_FILLERS_AND_STOPWORDS = {
+    "um", "uh", "like", "you", "know", "the", "a", "an", "and", "or", "but",
+    "in", "on", "at", "to", "for", "with", "by", "from", "of", "about",
+    "into", "through", "after", "before", "is", "are", "was", "were", "be",
+    "been", "being", "have", "has", "had", "do", "does", "did", "can",
+    "could", "will", "would", "shall", "should", "may", "might", "must",
+    "it", "its", "this", "that", "these", "those", "i", "me", "my", "we",
+    "our", "they", "their", "he", "him", "his", "she", "her", "so", "very",
+    "just", "really", "basically", "actually"
+}
+
+
+def validate_polish_output(raw_text: str, polished_text: str) -> tuple[bool, str]:
+    """Validate LLM polish output against expansion, conversational preambles, and low overlap."""
+    if not polished_text or not polished_text.strip():
+        return False, "empty_output"
+
+    cleaned_polished = polished_text.strip()
+
+    # 1. Conversational assistant preamble check
+    if CHATBOT_PREAMBLE_PATTERN.search(cleaned_polished):
+        return False, "chatbot_preamble_detected"
+
+    # Tokenize words
+    in_tokens = re.findall(r"\b\w+\b", raw_text)
+    out_tokens = re.findall(r"\b\w+\b", cleaned_polished)
+    in_words = len(in_tokens)
+    out_words = len(out_tokens)
+
+    if in_words == 0:
+        return True, "ok"
+
+    # 2. Expansion threshold: e.g. 10 words expanding to 43 words
+    max_allowed_words = max(int(in_words * 1.5), in_words + 6)
+    if out_words > max_allowed_words:
+        return False, f"expansion_exceeded ({in_words} -> {out_words} words, max {max_allowed_words})"
+
+    # 3. Truncation threshold
+    if in_words >= 15 and out_words < int(in_words * 0.65):
+        return False, f"truncation_exceeded ({in_words} -> {out_words} words)"
+
+    # 4. Vocabulary overlap check
+    in_content = {w.lower() for w in in_tokens if w.lower() not in COMMON_FILLERS_AND_STOPWORDS and len(w) > 2}
+    out_content = {w.lower() for w in out_tokens}
+
+    if in_content:
+        overlap = len(in_content.intersection(out_content)) / len(in_content)
+        if overlap < 0.65:
+            return False, f"low_vocabulary_overlap ({overlap:.1%} < 65.0%)"
+
+    return True, "ok"
+
+
 def _llm_polish(text: str, settings: dict, hotwords_file: str = "hotwords.txt") -> str:
     provider = str(settings.get("ai_polish_provider", "openrouter")).lower().strip()
 
@@ -259,11 +320,19 @@ def _llm_polish(text: str, settings: dict, hotwords_file: str = "hotwords.txt") 
             if not content:
                 return _light_polish(text, hotwords_file=hotwords_file)
 
-            # Safety check: if LLM summarized/omitted significant text, fall back to verbatim
-            in_words = len(text.split())
-            out_words = len(content.split())
-            if in_words >= 15 and out_words < int(in_words * 0.65):
-                log.warning("AI polish truncated text (%d -> %d words); falling back to verbatim", in_words, out_words)
+            # Strip any accidental outer <raw_transcript> or <transcript> tags echoing back
+            content = re.sub(r"^<raw_transcript>\s*", "", content, flags=re.IGNORECASE)
+            content = re.sub(r"\s*</raw_transcript>$", "", content, flags=re.IGNORECASE)
+            content = re.sub(r"^<transcript>\s*", "", content, flags=re.IGNORECASE)
+            content = re.sub(r"\s*</transcript>$", "", content, flags=re.IGNORECASE).strip()
+
+            # Output sanity checks and rejection guardrails (expansion, preambles, overlap, truncation)
+            valid, reason = validate_polish_output(text, content)
+            if not valid:
+                log.warning(
+                    "AI polish rejected output [%s]: raw='%s' output='%s'; falling back to verbatim",
+                    reason, text, content
+                )
                 return _light_polish(text, hotwords_file=hotwords_file)
 
             return content
@@ -275,10 +344,10 @@ def _llm_polish(text: str, settings: dict, hotwords_file: str = "hotwords.txt") 
         except Exception:
             msg = str(e)
         log.warning("AI polish API call failed for %s (HTTP %s: %s); using local fallback", provider, e.code, msg)
-        return _light_polish(text)
+        return _light_polish(text, hotwords_file=hotwords_file)
     except Exception as e:
         log.warning("AI polish API call failed for %s (%s: %s); using local fallback", provider, type(e).__name__, e)
-        return _light_polish(text)
+        return _light_polish(text, hotwords_file=hotwords_file)
 
 
 light_polish = _light_polish

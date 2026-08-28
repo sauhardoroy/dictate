@@ -68,3 +68,100 @@ def test_history_manager_update_last_entry_for_async_polish(tmp_path):
     assert updated.word_count == 5
 
 
+def test_validate_polish_output_preambles():
+    from punctuation.post_processor import validate_polish_output
+
+    raw = "can you tell me who is the president of america"
+    bad_preambles = [
+        "I cannot answer that question based on the transcript provided, as it does not contain a query.",
+        "Here's a technical text you can dictate for practice:",
+        "Sure, the current president is Donald Trump.",
+        "As an AI, I am unable to perform this task.",
+        "I'm sorry, I cannot help with that request.",
+    ]
+    for bad in bad_preambles:
+        valid, reason = validate_polish_output(raw, bad)
+        assert valid is False
+        assert "preamble" in reason or "expansion" in reason
+
+
+def test_validate_polish_output_expansion():
+    from punctuation.post_processor import validate_polish_output
+
+    raw = "can you give me a sentence with technical jargon"  # 8 words
+    # 35 words (expansion exceeded)
+    expanded = "The implementation of asynchronous event-driven architecture utilizing non-blocking I/O paradigms significantly mitigates latency bottlenecks in distributed systems, thereby enhancing throughput via parallelized computational pathways."
+    valid, reason = validate_polish_output(raw, expanded)
+    assert valid is False
+    assert "expansion" in reason or "overlap" in reason
+
+
+def test_validate_polish_output_low_vocabulary_overlap():
+    from punctuation.post_processor import validate_polish_output
+
+    raw = "we should schedule the meeting for tomorrow afternoon"
+    unrelated = "Quantum computers leverage superposition to calculate prime factors efficiently."
+    valid, reason = validate_polish_output(raw, unrelated)
+    assert valid is False
+    assert "overlap" in reason
+
+
+def test_validate_polish_output_valid_dictations():
+    from punctuation.post_processor import validate_polish_output
+
+    cases = [
+        ("can you tell me who the president of america is", "Can you tell me who the president of America is?"),
+        ("please review the pull request before deploying to production", "Please review the pull request before deploying to production."),
+        ("i am testing the new feature on the backend and it looks good so far", "I am testing the new feature on the backend and it looks good so far."),
+        ("the quick brown fox jumps over the lazy dog", "The quick brown fox jumps over the lazy dog."),
+        (
+            "retrieval augmented generation is a common technique in modern AI systems where a language model retrieves relevant information before generating an answer.",
+            "Retrieval Augmented Generation is a common technique in modern AI systems where a language model retrieves relevant information before generating an answer."
+        )
+    ]
+    for raw, polished in cases:
+        valid, reason = validate_polish_output(raw, polished)
+        assert valid is True, f"Failed on {raw}: {reason}"
+
+
+def test_llm_polish_guardrail_fallback_on_bad_api_response(monkeypatch):
+    from punctuation.post_processor import _llm_polish
+    import json
+    import io
+
+    # Mock urlopen to return a conversational response (repro case 1)
+    fake_response = {
+        "choices": [{
+            "message": {
+                "content": "Here's a technical text you can dictate for practice: The quantum cryptography mechanism overhaul..."
+            }
+        }]
+    }
+
+    class MockResponse:
+        def read(self):
+            return json.dumps(fake_response).encode("utf-8")
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda req, timeout: MockResponse())
+
+    settings = {
+        "ai_polish_provider": "openrouter",
+        "ai_polish_api_key": "dummy_key",
+        "ai_polish_base_url": "https://openrouter.ai/api/v1",
+        "ai_polish_model": "minimax/minimax-m3:free",
+    }
+
+    raw = "can you give me a text that will have some difficult technical jargons"
+    result = _llm_polish(raw, settings)
+
+    # Must reject the preamble/expanded response and fall back to verbatim _light_polish
+    assert "Here's a" not in result
+    assert "quantum" not in result
+    assert "technical jargons" in result.lower()
+
+
+
