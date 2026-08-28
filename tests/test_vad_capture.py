@@ -43,3 +43,27 @@ def test_recorder_snapshot_and_duration():
     snapshot = rec.snapshot()
     assert len(snapshot) == 2048
     assert rec.duration() == 2048 / 16000.0
+
+
+def test_recorder_preallocated_buffer_and_expansion():
+    rec = Recorder(use_vad=False)
+    rec._running = True
+
+    # Simulate callback ingestion directly via _cb
+    chunk1 = np.ones((1024, 1), dtype=np.float32) * 0.5
+    rec._cb(chunk1, 1024, None, None)
+    rec._cb(chunk1, 1024, None, None)
+
+    assert rec._write_pos == 2048
+    snap = rec.snapshot()
+    assert len(snap) == 2048
+    assert np.allclose(snap, 0.5)
+    assert rec.duration() == 2048 / 16000.0
+    assert rec.speech_seconds(thresh=0.1) == 2048 / 16000.0
+
+    # Test buffer dynamic capacity expansion
+    large_chunk = np.ones((rec.INITIAL_CAPACITY_SAMPLES, 1), dtype=np.float32) * 0.25
+    rec._cb(large_chunk, rec.INITIAL_CAPACITY_SAMPLES, None, None)
+    assert rec._write_pos == 2048 + rec.INITIAL_CAPACITY_SAMPLES
+    assert len(rec._buffer) > rec.INITIAL_CAPACITY_SAMPLES
+

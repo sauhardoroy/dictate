@@ -185,7 +185,9 @@ def get_speech_timestamps(
 
 
 class Recorder:
-    """Thread-safe, decoupled 16kHz microphone recorder with background VAD processing."""
+    """Thread-safe, decoupled 16kHz microphone recorder with pre-allocated audio buffer and background VAD."""
+
+    INITIAL_CAPACITY_SAMPLES = 16000 * 300  # 5 minutes default pre-allocation (~19.2 MB)
 
     def __init__(self, device=None, on_level=None, on_auto_stop=None, on_silence_eval=None,
                  on_chunk=None,
@@ -202,6 +204,9 @@ class Recorder:
         self.base_silence_seconds = vad_silence_seconds
         self.vad_silence_frames = max(1, round(vad_silence_seconds * SAMPLE_RATE / BLOCK_SIZE))
         self.frames = []
+        self._buffer = np.zeros(self.INITIAL_CAPACITY_SAMPLES, dtype=np.float32)
+        self._write_pos = 0
+        self._buf_lock = threading.Lock()
         self.stream = None
         self.vad = None
         self.silence_frames = 0
@@ -211,12 +216,24 @@ class Recorder:
         self._running = False
         self._worker_thread = None
 
+    def _ensure_buffer_capacity(self, needed_samples: int):
+        """Expand buffer capacity dynamically if audio recording exceeds pre-allocated size."""
+        with self._buf_lock:
+            current_cap = len(self._buffer)
+            if self._write_pos + needed_samples > current_cap:
+                new_cap = max(current_cap * 2, self._write_pos + needed_samples + 16000 * 60)
+                new_buf = np.zeros(new_cap, dtype=np.float32)
+                new_buf[:self._write_pos] = self._buffer[:self._write_pos]
+                self._buffer = new_buf
+
     def update_silence_duration(self, seconds: float):
         """Dynamically adjusts the required silence duration (e.g. for mid-thought pauses)."""
         self.vad_silence_frames = max(1, round(seconds * SAMPLE_RATE / BLOCK_SIZE))
         log.debug("VAD silence threshold adapted to %.2fs (%d frames)", seconds, self.vad_silence_frames)
 
     def start(self):
+        with self._buf_lock:
+            self._write_pos = 0
         self.frames = []
         self.silence_frames = 0
         self.has_spoken = False
@@ -251,11 +268,17 @@ class Recorder:
             raise MicUnavailableError(str(exc)) from exc
 
     def _cb(self, indata, frames, time_info, status):
-        """Realtime PortAudio callback: appends chunk and enqueues in microseconds without blocking."""
-        data_copy = indata.copy()
-        self.frames.append(data_copy)
-        if self._running:
-            self._queue.put_nowait(data_copy[:, 0])
+        """Realtime PortAudio callback: writes chunk to pre-allocated buffer without heap allocations."""
+        if not self._running:
+            return
+        mono = indata[:, 0] if indata.ndim > 1 else indata
+        n = len(mono)
+        self._ensure_buffer_capacity(n)
+        with self._buf_lock:
+            self._buffer[self._write_pos : self._write_pos + n] = mono
+            self._write_pos += n
+        self.frames.append(indata.copy())
+        self._queue.put_nowait(mono.copy())
 
     def _worker_loop(self):
         """Dedicated background worker for audio processing, level meter, and VAD evaluation."""
@@ -321,12 +344,15 @@ class Recorder:
 
     def snapshot(self) -> np.ndarray:
         """Return a snapshot copy of all recorded audio so far without stopping."""
-        if not self.frames:
-            return np.zeros(0, dtype="float32")
-        try:
-            return np.concatenate(self.frames)[:, 0].astype("float32")
-        except Exception:
-            return np.zeros(0, dtype="float32")
+        with self._buf_lock:
+            if self._write_pos > 0:
+                return self._buffer[:self._write_pos].copy()
+        if self.frames:
+            try:
+                return np.concatenate(self.frames)[:, 0].astype("float32")
+            except Exception:
+                return np.zeros(0, dtype="float32")
+        return np.zeros(0, dtype="float32")
 
     def stop(self) -> np.ndarray:
         self._running = False
@@ -347,10 +373,23 @@ class Recorder:
         return self.snapshot()
 
     def duration(self) -> float:
+        with self._buf_lock:
+            if self._write_pos > 0:
+                return self._write_pos / SAMPLE_RATE
         return sum(len(f) for f in self.frames) / SAMPLE_RATE
 
     def speech_seconds(self, thresh=0.012) -> float:
         """Seconds of audio above a crude RMS speech threshold."""
+        with self._buf_lock:
+            if self._write_pos > 0:
+                audio = self._buffer[:self._write_pos]
+                n_blocks = len(audio) // BLOCK_SIZE
+                count = 0
+                for i in range(n_blocks):
+                    chunk = audio[i * BLOCK_SIZE : (i + 1) * BLOCK_SIZE]
+                    if float(np.sqrt(np.mean(chunk ** 2))) > thresh:
+                        count += 1
+                return count * BLOCK_SIZE / SAMPLE_RATE
         n = sum(
             1 for f in self.frames if float(np.sqrt(np.mean(f ** 2))) > thresh
         )
