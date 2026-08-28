@@ -26,3 +26,30 @@ def test_sherpa_offline_engine_instantiation():
     engine = SherpaOfflineEngine(model_id="sense-voice-small")
     assert engine.model_id == "sense-voice-small"
     assert engine.is_loaded() is False
+
+
+def test_parakeet_engine_long_audio_timestamp_stitching():
+    """Verify that >20s audio triggers VAD chunking and acoustic timestamp stitching without errors."""
+    import soundfile as sf
+    import numpy as np
+
+    p0 = "models/sherpa-onnx-streaming-zipformer-en-2023-06-26/test_wavs/0.wav"
+    p1 = "models/sherpa-onnx-streaming-zipformer-en-2023-06-26/test_wavs/1.wav"
+    if not (os.path.exists(p0) and os.path.exists(p1)):
+        pytest.skip("Test wavs not found")
+
+    w0, _ = sf.read(p0)
+    w1, _ = sf.read(p1)
+    long_audio = np.concatenate([w0, w1]).astype(np.float32)
+    assert len(long_audio) / 16000.0 > 20.0  # Must be >20s
+
+    engine = ParakeetTDTEngine()
+    engine.load()
+    res = engine.transcribe(long_audio)
+
+    assert isinstance(res, dict)
+    assert "text" in res
+    # Must contain speech from both segments stitched together
+    assert "yellow lamps" in res["text"].lower()
+    assert "consequence" in res["text"].lower()
+

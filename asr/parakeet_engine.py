@@ -155,7 +155,7 @@ class ParakeetTDTEngine(ASREngine):
         return self._is_loaded and self.recognizer is not None
 
     def transcribe(self, audio: np.ndarray, fast: bool = False) -> dict:
-        """Transcribe 16kHz float32 audio with adaptive VAD chunking for long audio."""
+        """Transcribe 16kHz float32 audio with adaptive VAD chunking and acoustic timestamp stitching."""
         if not self.is_loaded():
             raise RuntimeError("Parakeet TDT model is not loaded")
 
@@ -175,7 +175,7 @@ class ParakeetTDTEngine(ASREngine):
                     timestamps = get_speech_timestamps(
                         audio_seg,
                         min_silence_duration_ms=min_silence,
-                        speech_pad_ms=100,
+                        speech_pad_ms=200,
                         sampling_rate=16000,
                     )
                 except Exception as e:
@@ -185,7 +185,7 @@ class ParakeetTDTEngine(ASREngine):
                 if not timestamps:
                     timestamps = [{"start": 0, "end": len(audio_seg)}]
 
-                max_samples = 20 * 16000
+                max_samples = 18 * 16000
                 final_segments = []
                 for ts in timestamps:
                     seg_len = ts["end"] - ts["start"]
@@ -215,15 +215,46 @@ class ParakeetTDTEngine(ASREngine):
 
             safe_segments = _get_safe_segments(audio, 0, 500)
 
+            # Acoustic timestamp cut-point stitching algorithm:
+            # For N overlapping/adjacent segments, compute mid-point cut points in global seconds.
+            # Each segment decodes with acoustic context padding, and tokens are filtered by their
+            # global timestamp to prevent boundary truncation or duplication.
+            pad_samp = 3200  # 200ms acoustic context pad
+            n_segs = len(safe_segments)
+            cut_points = []
+            for i in range(n_segs - 1):
+                mid_sample = (safe_segments[i]["end"] + safe_segments[i + 1]["start"]) / 2.0
+                cut_points.append(mid_sample / 16000.0)
+
             results = []
-            for ts in safe_segments:
-                segment = audio[ts["start"]:ts["end"]]
+            for i, ts in enumerate(safe_segments):
+                seg_start = max(0, ts["start"] - pad_samp)
+                seg_end = min(len(audio), ts["end"] + pad_samp)
+                segment = np.ascontiguousarray(audio[seg_start:seg_end], dtype=np.float32)
                 if len(segment) < 800:
                     continue
+
                 stream = self.recognizer.create_stream()
                 stream.accept_waveform(16000, segment)
                 self.recognizer.decode_stream(stream)
-                t = stream.result.text.strip()
+
+                tokens = getattr(stream.result, "tokens", [])
+                ts_list = getattr(stream.result, "timestamps", [])
+                seg_offset_sec = seg_start / 16000.0
+
+                if tokens and ts_list and len(tokens) == len(ts_list):
+                    kept_tokens = []
+                    for tok, t_rel in zip(tokens, ts_list):
+                        t_glob = seg_offset_sec + t_rel
+                        if i > 0 and t_glob <= cut_points[i - 1]:
+                            continue
+                        if i < n_segs - 1 and t_glob > cut_points[i]:
+                            continue
+                        kept_tokens.append(tok)
+                    t = "".join(kept_tokens).replace("\u2581", " ").strip()
+                else:
+                    t = stream.result.text.strip()
+
                 if t:
                     results.append(t)
 
