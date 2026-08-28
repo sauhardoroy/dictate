@@ -132,6 +132,12 @@ class Pill(QWidget):
 
         self._bg_pixmap = None
         self._liquid_image = None
+        self._last_rendered_pos = None
+        self._last_rendered_size = None
+        self._last_rendered_state = None
+        self._last_rendered_dark = None
+        self._last_rendered_hover = None
+        self._backdrop_dirty = True
 
         style = theme.STATES["idle"]
         self._width = float(style.width)
@@ -177,7 +183,7 @@ class Pill(QWidget):
 
         # Real-time backdrop grab timer
         self._bg_timer = QTimer(self)
-        self._bg_timer.setInterval(theme.BACKDROP_UPDATE_MS)
+        self._bg_timer.setInterval(1000)
         self._bg_timer.timeout.connect(self._update_background_grab)
 
         # Set accessible name & description
@@ -196,7 +202,7 @@ class Pill(QWidget):
 
         self.show()
         self._apply_native_flags()
-        QTimer.singleShot(50, self._update_background_grab)
+        QTimer.singleShot(50, lambda: self._update_background_grab(force=True))
         self._bg_timer.start()
 
     def _is_position_visible(self, x: int, y: int) -> bool:
@@ -206,9 +212,16 @@ class Pill(QWidget):
                 return True
         return False
 
+    def moveEvent(self, event):
+        super().moveEvent(event)
+        self._backdrop_dirty = True
+        self._update_background_grab()
+
     def showEvent(self, event):
         super().showEvent(event)
         self._apply_native_flags()
+        self._backdrop_dirty = True
+        self._update_background_grab(force=True)
 
     def _apply_native_flags(self):
         try:
@@ -221,16 +234,37 @@ class Pill(QWidget):
         except Exception:
             pass
 
-    def _update_background_grab(self):
+    def _update_background_grab(self, force: bool = False):
         """Pass 1: Capture screen-space backdrop directly under pill coordinates."""
         if self.isMinimized() or not self.isVisible():
             return
+
+        cur_pos = (self.x(), self.y())
+        cur_size = (max(10, round(self._width)), max(10, round(self._height)))
+        is_dynamic = self._state in ("recording", "preview") or self._dragged
+
+        # Dirty check: skip heavy screen capture and shader rendering when stationary and unchanged
+        if not force and not is_dynamic and not self._backdrop_dirty:
+            if (cur_pos == self._last_rendered_pos and
+                cur_size == self._last_rendered_size and
+                self._state == self._last_rendered_state and
+                self._dark == self._last_rendered_dark and
+                self._hovered == self._last_rendered_hover and
+                self._liquid_image is not None):
+                return
+
         try:
             screen = QApplication.screenAt(self.pos()) or QApplication.primaryScreen()
             if screen:
-                w, h = max(10, self.width()), max(10, self.height())
+                w, h = cur_size
                 self._bg_pixmap = screen.grabWindow(0, self.x(), self.y(), w, h)
                 self._execute_shader_pass()
+                self._last_rendered_pos = cur_pos
+                self._last_rendered_size = cur_size
+                self._last_rendered_state = self._state
+                self._last_rendered_dark = self._dark
+                self._last_rendered_hover = self._hovered
+                self._backdrop_dirty = False
                 self.update()
         except Exception:
             pass
@@ -334,11 +368,13 @@ class Pill(QWidget):
             self._pulse_anim.stop()
             self._pulse = 1.0
 
-        # Visualizer timer
+        # Visualizer and backdrop refresh timer throttling
         if state in ("recording", "preview"):
+            self._bg_timer.setInterval(theme.BACKDROP_UPDATE_MS)
             if not self._vis_timer.isActive():
                 self._vis_timer.start()
         else:
+            self._bg_timer.setInterval(1000)
             if self._vis_timer.isActive():
                 self._vis_timer.stop()
             self._level = 0.0
@@ -348,7 +384,8 @@ class Pill(QWidget):
             self._shake_anim.stop()
             self._shake_anim.start()
 
-        self._execute_shader_pass()
+        self._backdrop_dirty = True
+        self._update_background_grab()
         self.update()
 
     def _start_morph(self, target_width: int, target_height: int):
@@ -590,13 +627,15 @@ class Pill(QWidget):
     def enterEvent(self, event):
         super().enterEvent(event)
         self._hovered = True
-        self._execute_shader_pass()
+        self._backdrop_dirty = True
+        self._update_background_grab()
         self.update()
 
     def leaveEvent(self, event):
         super().leaveEvent(event)
         self._hovered = False
-        self._execute_shader_pass()
+        self._backdrop_dirty = True
+        self._update_background_grab()
         self.update()
 
     def mousePressEvent(self, e):

@@ -674,15 +674,32 @@ class SettingsDialog(QDialog):
             "ai_polish_model_nvidia": self._provider_data["nvidia"]["model"],
         }
 
+    def _cleanup_audio(self):
+        if hasattr(self, "mic_tester") and self.mic_tester:
+            try:
+                self.mic_tester.cleanup()
+            except Exception:
+                pass
+
     def _on_save(self):
-        if hasattr(self, "mic_tester"):
-            self.mic_tester.cleanup()
+        self._cleanup_audio()
         self.accept()
 
     def _on_cancel(self):
-        if hasattr(self, "mic_tester"):
-            self.mic_tester.cleanup()
+        self._cleanup_audio()
         self.reject()
+
+    def closeEvent(self, event):
+        self._cleanup_audio()
+        super().closeEvent(event)
+
+    def reject(self):
+        self._cleanup_audio()
+        super().reject()
+
+    def accept(self):
+        self._cleanup_audio()
+        super().accept()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and event.position().y() < 72:
