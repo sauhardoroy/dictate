@@ -53,3 +53,28 @@ def test_streaming_engine_paraformer_load():
     assert res is None or isinstance(res, str)
     final = engine.stop_stream()
     assert isinstance(final, str)
+
+
+def test_streaming_engine_resolve_hotwords(tmp_path):
+    hw_file = tmp_path / "custom_streaming_hw.txt"
+    hw_file.write_text("PyTorch:2.0\nKubernetes:2.0\n", encoding="utf-8")
+
+    engine = SherpaStreamingEngine()
+    resolved = engine._resolve_hotwords_file(str(hw_file))
+    assert os.path.isfile(resolved)
+    with open(resolved, "r", encoding="utf-8") as f:
+        content = f.read()
+    assert "pytorch" in content
+    assert "kubernetes" in content
+
+
+def test_streaming_engine_load_with_hotwords(tmp_path):
+    hw_file = tmp_path / "custom_streaming_hw.txt"
+    hw_file.write_text("pytorch:2.0\nkubernetes:2.0\n", encoding="utf-8")
+
+    engine = SherpaStreamingEngine()
+    # FastConformer CTC will initialize in greedy search mode with clear logging
+    ok = engine.load(model_choice="nemo-fast-conformer-80ms", hotwords_file=str(hw_file), hotwords_score=2.5)
+    assert ok is True
+    assert engine.is_available() is True
+

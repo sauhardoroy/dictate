@@ -83,7 +83,9 @@ class DictateApp(QObject):
 
         self.streaming_engine = SherpaStreamingEngine()
         model_name = self.settings.get("streaming_model", "zipformer-70M")
-        threading.Thread(target=lambda: self.streaming_engine.load(model_name), daemon=True).start()
+        hw_file = self.settings.get("hotwords_file", "hotwords.txt")
+        hw_score = float(self.settings.get("hotwords_score", 2.0))
+        threading.Thread(target=lambda: self.streaming_engine.load(model_name, hotwords_file=hw_file, hotwords_score=hw_score), daemon=True).start()
 
         self._interim_timer = QTimer(self)
         self._interim_timer.setInterval(200)
@@ -611,9 +613,11 @@ class DictateApp(QObject):
                 self.settings[k] = v
             log.info("settings updated: %s", ", ".join(sorted(vals.keys())))
 
-            if hasattr(self, "streaming_engine") and streaming_changed:
-                new_s_model = vals.get("streaming_model", "nemo-fast-conformer-80ms")
-                threading.Thread(target=lambda: self.streaming_engine.load(new_s_model), daemon=True).start()
+            if hasattr(self, "streaming_engine") and (streaming_changed or "hotwords_file" in vals or "hotwords_score" in vals):
+                new_s_model = vals.get("streaming_model", self.settings.get("streaming_model", "nemo-fast-conformer-80ms"))
+                hw_file = vals.get("hotwords_file", self.settings.get("hotwords_file", "hotwords.txt"))
+                hw_score = float(vals.get("hotwords_score", self.settings.get("hotwords_score", 2.0)))
+                threading.Thread(target=lambda: self.streaming_engine.load(new_s_model, hotwords_file=hw_file, hotwords_score=hw_score), daemon=True).start()
 
             # Custom vocabulary is read per-transcription, not baked into the
             # loaded model, so it can be updated live without a reload.

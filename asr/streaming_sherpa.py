@@ -40,14 +40,58 @@ class SherpaStreamingEngine:
     def is_available(self) -> bool:
         return self._is_ready and self.recognizer is not None
 
-    def load(self, model_choice: str = "nemo-fast-conformer-80ms", async_download: bool = False) -> bool:
-        """Initialize the Sherpa-ONNX online recognizer with NVIDIA FastConformer CTC or Alibaba Paraformer."""
+    def _resolve_hotwords_file(self, hotwords_file: str = "hotwords.txt") -> str:
+        """Find valid hotwords.txt and prepare a sanitized lowercase version for Sherpa-ONNX."""
+        if not hotwords_file:
+            return ""
+        candidates = [
+            hotwords_file,
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), hotwords_file),
+            os.path.join(os.path.dirname(sys.executable), hotwords_file) if getattr(sys, "frozen", False) else "",
+        ]
+        raw_path = ""
+        for cand in candidates:
+            if cand and os.path.isfile(cand) and os.path.getsize(cand) > 0:
+                raw_path = os.path.abspath(cand)
+                break
+
+        if not raw_path:
+            return ""
+
+        try:
+            import re
+            clean_lines = []
+            with open(raw_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    word = line.split(":", 1)[0].split("/", 1)[0].strip()
+                    word = re.sub(r"[^\w\s\-]", "", word).strip()
+                    if word:
+                        clean_lines.append(word.lower())
+
+            if clean_lines:
+                clean_path = os.path.join(os.path.dirname(raw_path), ".hotwords_sherpa.txt")
+                with open(clean_path, "w", encoding="utf-8") as f:
+                    f.write("\n".join(clean_lines) + "\n")
+                return clean_path
+        except Exception as e:
+            log.warning("Could not sanitize streaming hotwords file: %s", e)
+
+        return raw_path
+
+    def load(self, model_choice: str = "nemo-fast-conformer-80ms", async_download: bool = False,
+             hotwords_file: str = "hotwords.txt", hotwords_score: float = 2.0) -> bool:
+        """Initialize the Sherpa-ONNX online recognizer with NVIDIA FastConformer CTC, Alibaba Paraformer, or Zipformer."""
         try:
             import sherpa_onnx
             from asr.model_manager import ensure_model_downloaded
         except ImportError:
             log.warning("sherpa-onnx not installed; streaming live preview disabled")
             return False
+
+        hw_path = self._resolve_hotwords_file(hotwords_file)
 
         # 1. Alibaba Streaming Paraformer (Bilingual ZH/EN)
         if model_choice in ("paraformer-zh-en", "streaming-paraformer", "paraformer", "alibaba-paraformer", "sense-voice-small"):
@@ -71,7 +115,7 @@ class SherpaStreamingEngine:
                     decoding_method="greedy_search",
                 )
                 self._is_ready = True
-                log.info("Alibaba Streaming Paraformer ready")
+                log.info("Alibaba Streaming Paraformer ready (Paraformer architecture uses greedy search)")
                 return True
             except Exception as e:
                 log.warning("Alibaba Paraformer load failed (%s); checking fallbacks", e)
@@ -89,7 +133,7 @@ class SherpaStreamingEngine:
                 decoding_method="greedy_search",
             )
             self._is_ready = True
-            log.info("NVIDIA Streaming FastConformer CTC ready")
+            log.info("NVIDIA Streaming FastConformer CTC ready (CTC architecture uses greedy search)")
             return True
         except Exception as e:
             log.warning("FastConformer load failed (%s); checking local models", e)
@@ -103,7 +147,7 @@ class SherpaStreamingEngine:
 
         if os.path.exists(enc_high) and os.path.exists(dec_high) and os.path.exists(join_high) and os.path.exists(tokens_high):
             log.info("Loading high-accuracy Sherpa Zipformer 70M streaming model...")
-            return self._init_recognizer(tokens_high, enc_high, dec_high, join_high)
+            return self._init_recognizer(tokens_high, enc_high, dec_high, join_high, hw_path=hw_path, hotwords_score=hotwords_score)
 
 
         # 3. Handle Bilingual Zh/En Zipformer
@@ -116,10 +160,10 @@ class SherpaStreamingEngine:
                 joi_candidates = [f for f in onnx_files if "joiner" in f]
                 tokens = os.path.join(bi_dir, "tokens.txt")
                 if enc_candidates and dec_candidates and joi_candidates and os.path.exists(tokens):
-                    return self._init_recognizer(tokens, os.path.join(bi_dir, enc_candidates[0]), os.path.join(bi_dir, dec_candidates[0]), os.path.join(bi_dir, joi_candidates[0]))
+                    return self._init_recognizer(tokens, os.path.join(bi_dir, enc_candidates[0]), os.path.join(bi_dir, dec_candidates[0]), os.path.join(bi_dir, joi_candidates[0]), hw_path=hw_path, hotwords_score=hotwords_score)
                 log.warning("Bilingual Zipformer folder %s is missing required onnx or tokens files", bi_dir)
 
-        # 3. 20M Lightweight Zipformer
+        # 4. 20M Lightweight Zipformer
         model_dir = os.path.join(models_base, MODEL_DIR_NAME)
         encoder = os.path.join(model_dir, "encoder-epoch-99-avg-1.int8.onnx")
         decoder = os.path.join(model_dir, "decoder-epoch-99-avg-1.int8.onnx")
@@ -129,12 +173,12 @@ class SherpaStreamingEngine:
         # Check if complete model exists
         if not (os.path.exists(encoder) and os.path.exists(decoder) and os.path.exists(joiner) and os.path.exists(tokens)):
             if async_download:
-                threading.Thread(target=self._download_and_init, daemon=True).start()
+                threading.Thread(target=lambda: self._download_and_init(hw_path=hw_path, hotwords_score=hotwords_score), daemon=True).start()
                 return False
             else:
                 self._download_model(models_base)
 
-        return self._init_recognizer(tokens, encoder, decoder, joiner)
+        return self._init_recognizer(tokens, encoder, decoder, joiner, hw_path=hw_path, hotwords_score=hotwords_score)
 
     def _download_model(self, dest_dir: str):
         try:
@@ -157,7 +201,7 @@ class SherpaStreamingEngine:
         except Exception as e:
             log.error("Failed to download Sherpa-ONNX streaming model: %s", e)
 
-    def _download_and_init(self):
+    def _download_and_init(self, hw_path: str = "", hotwords_score: float = 2.0):
         models_base = get_models_dir()
         self._download_model(models_base)
         model_dir = os.path.join(models_base, MODEL_DIR_NAME)
@@ -165,11 +209,32 @@ class SherpaStreamingEngine:
         decoder = os.path.join(model_dir, "decoder-epoch-99-avg-1.int8.onnx")
         joiner = os.path.join(model_dir, "joiner-epoch-99-avg-1.int8.onnx")
         tokens = os.path.join(model_dir, "tokens.txt")
-        self._init_recognizer(tokens, encoder, decoder, joiner)
+        self._init_recognizer(tokens, encoder, decoder, joiner, hw_path=hw_path, hotwords_score=hotwords_score)
 
-    def _init_recognizer(self, tokens: str, encoder: str, decoder: str, joiner: str) -> bool:
+    def _init_recognizer(self, tokens: str, encoder: str, decoder: str, joiner: str,
+                         hw_path: str = "", hotwords_score: float = 2.0) -> bool:
         try:
             import sherpa_onnx
+            if hw_path:
+                try:
+                    self.recognizer = sherpa_onnx.OnlineRecognizer.from_transducer(
+                        tokens=tokens,
+                        encoder=encoder,
+                        decoder=decoder,
+                        joiner=joiner,
+                        num_threads=2,
+                        sample_rate=16000,
+                        feature_dim=80,
+                        decoding_method="modified_beam_search",
+                        hotwords_file=hw_path,
+                        hotwords_score=hotwords_score,
+                    )
+                    self._is_ready = True
+                    log.info("Sherpa-ONNX streaming Zipformer engine initialized with hotwords (score=%.1f)", hotwords_score)
+                    return True
+                except Exception as hw_exc:
+                    log.warning("Failed to initialize streaming Zipformer with hotwords (%s), falling back to greedy search", hw_exc)
+
             self.recognizer = sherpa_onnx.OnlineRecognizer.from_transducer(
                 tokens=tokens,
                 encoder=encoder,
