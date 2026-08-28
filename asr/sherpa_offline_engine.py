@@ -22,9 +22,11 @@ class SherpaOfflineEngine(ASREngine):
     """Generic offline engine wrapping SenseVoice or Moonshine models from Sherpa-ONNX."""
     name = "sherpa-offline"
 
-    def __init__(self, model_id: str = "sense-voice-small", num_threads: int = 4):
+    def __init__(self, model_id: str = "sense-voice-small", num_threads: int = 4, device: str = "auto"):
         self.model_id = model_id
         self.num_threads = num_threads or 4
+        self.device = device or "auto"
+        self.active_provider = "cpu"
         self.recognizer = None
         self._is_loaded = False
 
@@ -39,17 +41,32 @@ class SherpaOfflineEngine(ASREngine):
             model_file = os.path.join(model_dir, "model.int8.onnx" if os.path.exists(os.path.join(model_dir, "model.int8.onnx")) else "model.onnx")
             tokens_file = os.path.join(model_dir, "tokens.txt")
 
-            self.recognizer = sherpa_onnx.OfflineRecognizer.from_sense_voice(
-                model=model_file,
-                tokens=tokens_file,
-                num_threads=self.num_threads,
-                use_itn=True,
-            )
+            provider = "cuda" if self.device == "cuda" else "cpu"
+            try:
+                self.recognizer = sherpa_onnx.OfflineRecognizer.from_sense_voice(
+                    model=model_file,
+                    tokens=tokens_file,
+                    num_threads=self.num_threads,
+                    use_itn=True,
+                    provider=provider,
+                )
+                self.active_provider = provider
+            except Exception as exc:
+                log.warning("Failed to load SenseVoice with provider=%s (%s), falling back to CPU", provider, exc)
+                self.recognizer = sherpa_onnx.OfflineRecognizer.from_sense_voice(
+                    model=model_file,
+                    tokens=tokens_file,
+                    num_threads=self.num_threads,
+                    use_itn=True,
+                    provider="cpu",
+                )
+                self.active_provider = "cpu"
+
             self._is_loaded = True
         else:
             raise ValueError(f"Unsupported offline model: {self.model_id}. Only 'sense-voice-small' is supported.")
 
-        log.info("Model %s loaded successfully", self.model_id)
+        log.info("Model %s loaded successfully (provider=%s)", self.model_id, self.active_provider)
 
     def is_loaded(self) -> bool:
         return self._is_loaded and self.recognizer is not None

@@ -99,6 +99,7 @@ class ParakeetTDTEngine(ASREngine):
         if self.device == "cuda":
             provider = "cuda"
 
+        self.active_provider = "cpu"
         try:
             self.recognizer = sherpa_onnx.OfflineRecognizer.from_transducer(
                 encoder=encoder,
@@ -115,8 +116,11 @@ class ParakeetTDTEngine(ASREngine):
                 hotwords_score=self.hotwords_score,
                 provider=provider,
             )
+            self.active_provider = provider
+            log.info("Initialized Parakeet TDT recognizer with provider=%s", provider)
         except Exception as exc:
             log.warning("Failed to initialize with provider=%s (%s), falling back to CPU", provider, exc)
+            self.active_provider = "cpu"
             try:
                 self.recognizer = sherpa_onnx.OfflineRecognizer.from_transducer(
                     encoder=encoder,
@@ -149,7 +153,7 @@ class ParakeetTDTEngine(ASREngine):
                 )
 
         self._is_loaded = True
-        log.info("Parakeet TDT engine ready (hotwords=%s)", bool(hw_path))
+        log.info("Parakeet TDT engine ready (provider=%s, hotwords=%s)", self.active_provider, bool(hw_path))
 
     def is_loaded(self) -> bool:
         return self._is_loaded and self.recognizer is not None

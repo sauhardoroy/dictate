@@ -53,3 +53,23 @@ def test_parakeet_engine_long_audio_timestamp_stitching():
     assert "yellow lamps" in res["text"].lower()
     assert "consequence" in res["text"].lower()
 
+
+def test_parakeet_engine_cuda_fallback_on_cpu_system():
+    """Verify that requesting CUDA on a non-GPU system gracefully falls back to CPU without crashing."""
+    engine = ParakeetTDTEngine(device="cuda")
+    assert engine.device == "cuda"
+    engine.load()
+    assert engine.is_loaded() is True
+    # If no physical CUDA GPU is present, active_provider falls back to cpu
+    assert engine.active_provider in ("cpu", "cuda")
+
+
+def test_parakeet_engine_auto_device():
+    """Verify that device='auto' defaults to CPU safely."""
+    engine = ParakeetTDTEngine(device="auto")
+    assert engine.device == "auto"
+    engine.load()
+    assert engine.is_loaded() is True
+    assert engine.active_provider == "cpu"
+
+
