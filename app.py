@@ -33,6 +33,7 @@ from punctuation.voice_commands import (
     detect_mid_session_command,
     strip_continue_command,
 )
+from context.app_detector import get_active_context, ContextInfo
 from context.app_launcher import (
     load_app_registry,
     match_app_launch_command,
@@ -258,24 +259,21 @@ class DictateApp(QObject):
 
     def _capture_target_window(self):
         try:
-            if sys.platform == "win32":
-                import ctypes
-                cur_fg = ctypes.windll.user32.GetForegroundWindow()
-                pill_hwnd = int(self.pill.winId()) if hasattr(self, "pill") and self.pill else 0
-                if cur_fg and cur_fg != pill_hwnd:
-                    self.target_hwnd = cur_fg
-                    from injection.sanitizer import _get_process_name
-                    self.target_app_name = _get_process_name(cur_fg)
-                    buf = (ctypes.c_wchar * 260)()
-                    if ctypes.windll.user32.GetWindowTextW(cur_fg, buf, 260):
-                        self.target_window_title = buf.value
-                    else:
-                        self.target_window_title = ""
-            elif sys.platform == "darwin":
-                # On macOS, window focus is managed by the OS
-                self.target_hwnd = 0
-        except Exception:
-            pass
+            pill_hwnd = int(self.pill.winId()) if hasattr(self, "pill") and self.pill else 0
+            excluded = {pill_hwnd} if pill_hwnd else None
+            enabled = bool(self.settings.get("context_awareness_enabled", True))
+            ctx = get_active_context(excluded_hwnds=excluded, enabled=enabled)
+            self.target_hwnd = ctx.hwnd
+            self.target_app_name = ctx.executable_name
+            self.target_window_title = ctx.window_title
+            self.target_category = ctx.category
+            log.debug("Captured target window context: %s (category=%s)", ctx.executable_name, ctx.category)
+        except Exception as exc:
+            log.debug("Target window capture failed safely: %s", exc)
+            self.target_hwnd = 0
+            self.target_app_name = ""
+            self.target_window_title = ""
+            self.target_category = "unknown"
 
     @pyqtSlot()
     def on_trigger(self):

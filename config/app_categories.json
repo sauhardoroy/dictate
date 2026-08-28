@@ -1,0 +1,65 @@
+{
+  "executables": {
+    "winword.exe": "document_editor",
+    "wordpad.exe": "document_editor",
+    "notepad.exe": "document_editor",
+    "soffice.bin": "document_editor",
+    "writer.exe": "document_editor",
+    "acrobat.exe": "document_editor",
+    "acrord32.exe": "document_editor",
+    "onenote.exe": "document_editor",
+    "obsidian.exe": "document_editor",
+    "notion.exe": "document_editor",
+
+    "outlook.exe": "email_client",
+    "thunderbird.exe": "email_client",
+    "hxmail.exe": "email_client",
+    "mail.exe": "email_client",
+
+    "slack.exe": "messaging_app",
+    "discord.exe": "messaging_app",
+    "telegram.exe": "messaging_app",
+    "whatsapp.exe": "messaging_app",
+    "teams.exe": "messaging_app",
+    "ms-teams.exe": "messaging_app",
+    "signal.exe": "messaging_app",
+    "messenger.exe": "messaging_app",
+
+    "code.exe": "code_agent",
+    "cursor.exe": "code_agent",
+    "windsurf.exe": "code_agent",
+    "pycharm64.exe": "code_agent",
+    "idea64.exe": "code_agent",
+    "clion64.exe": "code_agent",
+    "devenv.exe": "code_agent",
+    "sublime_text.exe": "code_agent",
+    "notepad++.exe": "code_agent",
+
+    "windowsterminal.exe": "terminal",
+    "powershell.exe": "terminal",
+    "pwsh.exe": "terminal",
+    "cmd.exe": "terminal",
+    "alacritty.exe": "terminal",
+    "wezterm-gui.exe": "terminal",
+    "mintty.exe": "terminal",
+    "conhost.exe": "terminal",
+
+    "chrome.exe": "browser",
+    "firefox.exe": "browser",
+    "msedge.exe": "browser",
+    "brave.exe": "browser",
+    "opera.exe": "browser",
+    "vivaldi.exe": "browser",
+    "safari.exe": "browser"
+  },
+  "title_patterns": [
+    {"pattern": "(?i)google docs", "category": "document_editor"},
+    {"pattern": "(?i)microsoft word", "category": "document_editor"},
+    {"pattern": "(?i)gmail", "category": "email_client"},
+    {"pattern": "(?i)outlook", "category": "email_client"},
+    {"pattern": "(?i)slack", "category": "messaging_app"},
+    {"pattern": "(?i)discord", "category": "messaging_app"},
+    {"pattern": "(?i)whatsapp", "category": "messaging_app"},
+    {"pattern": "(?i)visual studio code", "category": "code_agent"}
+  ]
+}
