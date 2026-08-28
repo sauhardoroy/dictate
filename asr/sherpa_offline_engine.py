@@ -70,14 +70,12 @@ class SherpaOfflineEngine(ASREngine):
             
             def _get_safe_segments(audio_seg: np.ndarray, offset: int = 0, min_silence: int = 500) -> list[dict]:
                 try:
-                    from faster_whisper.vad import get_speech_timestamps, VadOptions
+                    from audio.capture import get_speech_timestamps
                     timestamps = get_speech_timestamps(
                         audio_seg, 
-                        vad_options=VadOptions(
-                            min_silence_duration_ms=min_silence,
-                            speech_pad_ms=100
-                        ),
-                        sampling_rate=16000
+                        min_silence_duration_ms=min_silence,
+                        speech_pad_ms=100,
+                        sampling_rate=16000,
                     )
                 except Exception as e:
                     log.warning("VAD chunking failed: %s", e)

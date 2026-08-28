@@ -181,25 +181,85 @@ class HotkeyManager:
     def _start_mac_listener(self):
         try:
             from pynput import keyboard
-            # Format hotkey for pynput
-            pynput_map = {"ctrl": "<ctrl>", "control": "<ctrl>", "alt": "<alt>", "option": "<alt>", "shift": "<shift>", "cmd": "<cmd>", "command": "<cmd>"}
-            parts = [p.strip().lower() for p in self.key.split("+")]
-            converted = []
-            for p in parts:
-                converted.append(pynput_map.get(p, p))
-            combo_str = "+".join(converted)
 
-            self._mac_listener = keyboard.GlobalHotKeys({
-                combo_str: self._on_mac_press
-            })
+            self._current_keys = set()
+
+            def _normalize_key(k) -> str:
+                if k is None:
+                    return ""
+                try:
+                    if isinstance(k, keyboard.Key):
+                        name = k.name.lower()
+                        if name.startswith("ctrl"):
+                            return "ctrl"
+                        if name.startswith("shift"):
+                            return "shift"
+                        if name.startswith("alt"):
+                            return "alt"
+                        if name.startswith("cmd"):
+                            return "cmd"
+                        return name
+                    if hasattr(k, "char") and k.char:
+                        return k.char.lower()
+                    if hasattr(k, "vk") and k.vk:
+                        name = get_name(k.vk)
+                        if name:
+                            return name.lower()
+                except Exception:
+                    pass
+                return str(k).lower().replace("key.", "")
+
+            # Parse required modifiers and main key
+            parts = [p.strip().lower() for p in self.key.split("+")]
+            req_mods = set()
+            req_main = ""
+            for p in parts:
+                if p in MODIFIER_NAMES:
+                    # Normalize modifier names to canonical ('ctrl', 'alt', 'shift', 'cmd')
+                    if p in ("control", "ctrl"):
+                        req_mods.add("ctrl")
+                    elif p in ("option", "alt"):
+                        req_mods.add("alt")
+                    elif p == "shift":
+                        req_mods.add("shift")
+                    elif p in ("win", "windows", "meta", "super", "cmd", "command"):
+                        req_mods.add("cmd")
+                else:
+                    req_main = p
+
+            def _is_combo_active():
+                if req_mods and not req_mods.issubset(self._current_keys):
+                    return False
+                if req_main and req_main not in self._current_keys:
+                    return False
+                return True
+
+            def _on_press(k):
+                norm = _normalize_key(k)
+                if norm:
+                    self._current_keys.add(norm)
+                if _is_combo_active() and not self._is_down:
+                    self._is_down = True
+                    if self.on_press:
+                        self.on_press()
+
+            def _on_release(k):
+                norm = _normalize_key(k)
+                if norm:
+                    self._current_keys.discard(norm)
+                if not _is_combo_active() and self._is_down:
+                    self._is_down = False
+                    if self.mode == "ptt" and self.on_release:
+                        self.on_release()
+
+            self._mac_listener = keyboard.Listener(
+                on_press=_on_press,
+                on_release=_on_release,
+            )
             self._mac_listener.start()
         except Exception:
             # Fallback mock/noop for non-macOS test environments
             pass
-
-    def _on_mac_press(self):
-        if self.on_press:
-            self.on_press()
 
     def unregister(self):
         self._running = False
@@ -213,5 +273,7 @@ class HotkeyManager:
                 pass
             self._mac_listener = None
         self._is_down = False
+        if hasattr(self, "_current_keys"):
+            self._current_keys.clear()
 
 
