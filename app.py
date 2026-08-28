@@ -25,7 +25,7 @@ from hotkey.manager import HotkeyManager
 from injection.sanitizer import sanitize
 from injection.typer import execute_action, paste_text
 from log import get_logger
-from punctuation.post_processor import HALLUCINATION_BLOCKLIST, polish
+from punctuation.post_processor import HALLUCINATION_BLOCKLIST, polish, llm_polish
 from punctuation.semantic_vad import get_adaptive_silence_duration
 from punctuation.voice_commands import ACTION_DISPLAY_NAMES, get_action_command
 from ui.pill import Pill
@@ -202,15 +202,43 @@ class DictateApp(QObject):
                 result = self.engine.transcribe(audio)
             raw_text = result.get("text", "")
             result["raw_text"] = raw_text
+            dur = len(audio) / 16000.0
+            result["duration_s"] = dur
             log.debug("raw transcript (%d samples): %r", len(audio), raw_text)
 
-            # Post-process (potentially slow if using AI polish)
-            text = polish(raw_text, settings=self.settings.data)
-            result["text"] = text
-            result["duration_s"] = len(audio) / 16000.0
-            log.info("transcribed %.1fs -> %d chars", len(audio) / 16000, len(text))
+            ai_polish_enabled = bool(self.settings.get("ai_polish", False))
+            async_polish_enabled = bool(self.settings.get("async_polish", False))
 
-            self.sig.engine_result.emit(result)
+            if ai_polish_enabled and async_polish_enabled:
+                # Decoupled Fast Path: Apply instant light polish + hotwords (<10ms)
+                # and emit immediately for ~150ms instant text insertion
+                fast_settings = dict(self.settings.data)
+                fast_settings["ai_polish"] = False
+                fast_text = polish(raw_text, settings=fast_settings)
+                result["text"] = fast_text
+                log.info("transcribed (async polish fast path) %.1fs -> %d chars", dur, len(fast_text))
+                self.sig.engine_result.emit(result)
+
+                # Spawn background thread for asynchronous cloud LLM refinement
+                def _bg_polish():
+                    try:
+                        hw_file = self.settings.get("hotwords_file", "hotwords.txt")
+                        polished = llm_polish(raw_text, self.settings.data, hotwords_file=hw_file)
+                        if polished and polished != fast_text:
+                            self.history.update_last_entry_text(polished)
+                            log.info("Async AI polish completed: %r", polished)
+                    except Exception as bg_exc:
+                        log.warning("Async AI polish background task failed: %s", bg_exc)
+
+                threading.Thread(target=_bg_polish, daemon=True).start()
+
+            else:
+                # Synchronous path: Post-process (potentially slow if using AI polish)
+                text = polish(raw_text, settings=self.settings.data)
+                result["text"] = text
+                log.info("transcribed %.1fs -> %d chars", dur, len(text))
+                self.sig.engine_result.emit(result)
+
         except Exception as exc:  # noqa: BLE001
             log.exception("transcription failed")
             self.sig.engine_result.emit(exc)

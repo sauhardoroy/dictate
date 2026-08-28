@@ -258,3 +258,8 @@ def _llm_polish(text: str, settings: dict, hotwords_file: str = "hotwords.txt") 
     except Exception as e:
         log.warning("AI polish API call failed for %s (%s: %s); using local fallback", provider, type(e).__name__, e)
         return _light_polish(text)
+
+
+light_polish = _light_polish
+llm_polish = _llm_polish
+

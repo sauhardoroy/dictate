@@ -164,6 +164,20 @@ class HistoryManager:
         with self._lock:
             return self._entries[0] if self._entries else None
 
+    def update_last_entry_text(self, new_text: str) -> bool:
+        """Update the text of the most recent transcript entry (used for async AI polish)."""
+        if not new_text or not new_text.strip():
+            return False
+        with self._lock:
+            if not self._entries:
+                return False
+            clean_text = new_text.strip()
+            self._entries[0].text = clean_text
+            self._entries[0].word_count = len(clean_text.split())
+            self._entries[0].char_count = len(clean_text)
+            self.save()
+            return True
+
     def delete_entry(self, entry_id: str) -> bool:
         """Delete an entry by ID."""
         with self._lock:

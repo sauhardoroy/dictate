@@ -124,4 +124,20 @@ def test_cross_platform_autostart_macos(tmp_path, monkeypatch):
     assert not plist_file.exists()
 
 
+def test_settings_async_polish_configuration(tmp_path, monkeypatch, qapp):
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"ai_polish": True, "async_polish": True}), encoding="utf-8")
+    monkeypatch.setattr(settings_module, "settings_path", lambda: str(path))
+
+    settings = settings_module.Settings()
+    assert settings["ai_polish"] is True
+    assert settings["async_polish"] is True
+
+    from ui.settings_dialog import SettingsDialog
+    dlg = SettingsDialog(settings.data)
+    assert dlg.async_polish_cb.isChecked() is True
+    assert dlg.values()["async_polish"] is True
+
+
+
 

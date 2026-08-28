@@ -50,3 +50,21 @@ def test_hotwords_casing_restoration(tmp_path):
     assert "Kubernetes" in result
     assert "REST API" in result
 
+
+def test_history_manager_update_last_entry_for_async_polish(tmp_path):
+    from history.manager import HistoryManager
+    hist_file = tmp_path / "history.json"
+    manager = HistoryManager(file_path=str(hist_file))
+
+    manager.add_entry(text="Hello world.", raw_text="hello world", duration_s=1.5)
+    last = manager.get_last()
+    assert last.text == "Hello world."
+
+    # Update text from background async polish
+    ok = manager.update_last_entry_text("Hello, world! Refined by AI.")
+    assert ok is True
+    updated = manager.get_last()
+    assert updated.text == "Hello, world! Refined by AI."
+    assert updated.word_count == 5
+
+

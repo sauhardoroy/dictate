@@ -593,6 +593,10 @@ class SettingsDialog(QDialog):
         cc_layout.addWidget(make_label("Model", "body"))
         cc_layout.addWidget(self.ai_polish_model)
 
+        self.async_polish_cb = QCheckBox("Instant paste first (Fast ~150ms injection, refine in background)")
+        self.async_polish_cb.setChecked(bool(data.get("async_polish", False)))
+        cc_layout.addWidget(self.async_polish_cb)
+
         c3.addWidget(self._cloud_config)
         self.ai_enable_cb.toggled.connect(self._on_cloud_toggled)
 
@@ -662,6 +666,7 @@ class SettingsDialog(QDialog):
             "show_interim_preview": self.preview_cb.isChecked(),
             "streaming_model": self.streaming_model.currentData() or self.streaming_model.currentText(),
             "ai_polish": self.ai_enable_cb.isChecked(),
+            "async_polish": self.async_polish_cb.isChecked(),
             "ai_polish_provider": cur_prov,
             "ai_polish_api_key": cur_key,
             "ai_polish_base_url": cur_url,
