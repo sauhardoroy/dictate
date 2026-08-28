@@ -47,6 +47,7 @@ DEFAULTS = {
     "max_history_entries": 100,
     "show_interim_preview": True,
     "streaming_model": "nemo-fast-conformer-80ms",
+    "context_awareness_enabled": True,
 }
 
 
@@ -150,6 +151,7 @@ _VALIDATORS = {
     "max_history_entries": lambda v: isinstance(v, int) and not isinstance(v, bool) and 10 <= v <= 10_000,
     "show_interim_preview": _is_bool,
     "streaming_model": lambda v: isinstance(v, str) and bool(v.strip()),
+    "context_awareness_enabled": _is_bool,
 }
 
 
