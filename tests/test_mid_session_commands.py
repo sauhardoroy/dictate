@@ -23,6 +23,8 @@ class TestMidSessionCommandDetection:
         "scratch that, start again",
         "scratch that start again",
         "  Start over  ",
+        "I made a mistake, start over",
+        "I was saying something wrong, let's start again.",
     ])
     def test_isolated_restart_commands(self, phrase):
         assert detect_mid_session_command(phrase) == "restart"
@@ -34,6 +36,8 @@ class TestMidSessionCommandDetection:
         "Keep going!",
         "let me continue",
         "  continue  ",
+        "give me a second, continue",
+        "let me think for a moment, keep going",
     ])
     def test_isolated_continue_commands(self, phrase):
         assert detect_mid_session_command(phrase) == "continue"

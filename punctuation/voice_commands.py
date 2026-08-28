@@ -95,27 +95,45 @@ CONTINUE_COMMANDS = {
     "let me continue",
 }
 
+RESTART_PATTERNS = [
+    r"(?i)(?:^|[.,!?;:\n])\s*(?:let's\s+start\s+again|lets\s+start\s+again|start\s+over|scratch\s+that,?\s+start\s+again)[.!?]?\s*$",
+]
+
+CONTINUE_PATTERNS = [
+    r"(?i)(?:^|[.,!?;:\n])\s*(?:continue|keep\s+going|let\s+me\s+continue)[.!?]?\s*$",
+]
+
 
 def detect_mid_session_command(segment_text: str) -> Optional[str]:
-    """Detect if an isolated speech segment matches a mid-session recording control command.
+    """Detect if speech matches a mid-session recording control command ('restart' or 'continue').
+
+    Matches either:
+    1. Standalone isolated commands (e.g. "start over", "let's start again", "continue")
+    2. Trailing command phrases spoken at the end of a dictation stream (e.g. "... start over")
+
+    Rejects embedded/mid-sentence occurrences (e.g. "continue tomorrow", "start over next week").
 
     Returns:
         'restart' for discard-and-restart commands
         'continue' for silence timer extension commands
-        None if not an exact match on an isolated command phrase.
-
-    Enforces strict whole-segment isolation: only triggers if the segment contains
-    ONLY the command phrase. Embedded or mid-sentence occurrences return None.
+        None if not matched.
     """
     if not segment_text:
         return None
-    cleaned = segment_text.strip().lower()
-    cleaned = re.sub(r"^[^\w\s']+|[^\w\s']+$", "", cleaned).strip()
+    cleaned = segment_text.strip()
+    if not cleaned:
+        return None
 
-    if cleaned in RESTART_COMMANDS:
-        return "restart"
-    if cleaned in CONTINUE_COMMANDS:
-        return "continue"
+    # Check for restart patterns
+    for pat in RESTART_PATTERNS:
+        if re.search(pat, cleaned):
+            return "restart"
+
+    # Check for continue patterns
+    for pat in CONTINUE_PATTERNS:
+        if re.search(pat, cleaned):
+            return "continue"
+
     return None
 
 
