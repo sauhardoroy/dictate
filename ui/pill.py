@@ -400,7 +400,8 @@ class Pill(QWidget):
             clip_path.addRect(text_rect)
             p.setClipPath(clip_path)
 
-            font_live = QFont("Segoe UI Variable Display", 10)
+            font_live = QFont("Segoe UI Variable Display")
+            font_live.setPixelSize(13)
             font_live.setWeight(QFont.Weight.DemiBold)
             p.setFont(font_live)
 
@@ -416,7 +417,8 @@ class Pill(QWidget):
                 p.setPen(QColor(t.on_surface))
                 p.drawText(QRectF(draw_x, 38.0, text_w + 10.0, 30.0), Qt.AlignmentFlag.AlignVCenter, self._live_transcript)
             else:
-                font_hint = QFont("Segoe UI Variable Display", 9)
+                font_hint = QFont("Segoe UI Variable Display")
+                font_hint.setPixelSize(12)
                 font_hint.setWeight(QFont.Weight.Medium)
                 p.setFont(font_hint)
                 p.setPen(QColor(t.on_surface_muted))
@@ -438,7 +440,8 @@ class Pill(QWidget):
                 p.drawEllipse(QPointF(dot_start_x + i * 8.0, cy), r, r)
 
             # Processing Label in on_surface
-            f = QFont("Segoe UI Variable Display", 9)
+            f = QFont("Segoe UI Variable Display")
+            f.setPixelSize(12)
             f.setWeight(QFont.Weight.DemiBold)
             p.setFont(f)
             p.setPen(QColor(t.on_surface))
@@ -452,7 +455,8 @@ class Pill(QWidget):
             p.drawLine(QPointF(check_x - 4.5, cy), QPointF(check_x - 1.0, cy + 3.5))
             p.drawLine(QPointF(check_x - 1.0, cy + 3.5), QPointF(check_x + 5.0, cy - 3.5))
 
-            f = QFont("Segoe UI Variable Display", 9)
+            f = QFont("Segoe UI Variable Display")
+            f.setPixelSize(12)
             f.setWeight(QFont.Weight.DemiBold)
             p.setFont(f)
             p.setPen(QColor(t.on_surface))

@@ -230,10 +230,12 @@ class PreviewOverlay(QWidget):
         words = self._display_words
         num_words = len(words)
 
-        font_normal = QFont("Segoe UI Variable Display", 9)
+        font_normal = QFont("Segoe UI Variable Display")
+        font_normal.setPixelSize(12)
         font_normal.setWeight(QFont.Weight.Normal)
 
-        font_active = QFont("Segoe UI Variable Display", 9)
+        font_active = QFont("Segoe UI Variable Display")
+        font_active.setPixelSize(12)
         font_active.setWeight(QFont.Weight.DemiBold)
 
         fm_normal = QFontMetrics(font_normal)
