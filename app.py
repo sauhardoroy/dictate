@@ -371,6 +371,15 @@ class DictateApp(QObject):
 
     def _on_silence_eval(self, audio_snapshot):
         """Asynchronously evaluates semantic thought completion on partial audio to dynamically adapt silence duration."""
+        # If the streaming engine is available, reuse its decoded interim text (zero offline inference cost)
+        if self.streaming_engine.is_available():
+            text = self.streaming_engine.get_last_text()
+            if text and self.recorder and self.state in ("recording", "preview"):
+                base_sec = float(self.settings.get("vad_silence_seconds", 1.4))
+                adaptive_sec = get_adaptive_silence_duration(text, base_silence_seconds=base_sec)
+                self.recorder.update_silence_duration(adaptive_sec)
+            return
+
         # If the fast interim timer is already running, it updates adaptive silence on every tick.
         if self.settings.get("show_interim_preview", True) and self._interim_timer.isActive():
             return

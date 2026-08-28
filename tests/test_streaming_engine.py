@@ -78,3 +78,28 @@ def test_streaming_engine_load_with_hotwords(tmp_path):
     assert ok is True
     assert engine.is_available() is True
 
+
+def test_streaming_engine_get_last_text():
+    engine = SherpaStreamingEngine()
+    assert engine.get_last_text() == ""
+    engine._last_text = "I would like to"
+    assert engine.get_last_text() == "I would like to"
+    final = engine.stop_stream()
+    assert final == "I would like to"
+    assert engine.get_last_text() == ""
+
+
+def test_pause_evaluation_uses_streaming_text_deduplication():
+    from punctuation.semantic_vad import get_adaptive_silence_duration
+
+    # Incomplete thought ends with preposition/conjunction -> requires longer pause
+    streaming_text = "we should go to the"
+    adaptive_sec = get_adaptive_silence_duration(streaming_text, base_silence_seconds=1.4)
+    assert adaptive_sec >= 2.0
+
+    # Complete thought -> standard pause
+    complete_text = "we should go to the store."
+    adaptive_sec_complete = get_adaptive_silence_duration(complete_text, base_silence_seconds=1.4)
+    assert adaptive_sec_complete == 1.4
+
+

@@ -292,6 +292,11 @@ class SherpaStreamingEngine:
                 log.debug("Sherpa stream decoding error: %s", e)
             return None
 
+    def get_last_text(self) -> str:
+        """Return the most recently decoded streaming text thread-safely."""
+        with self._lock:
+            return self._last_text
+
     def stop_stream(self) -> str:
         """Finish and close the current streaming session."""
         with self._lock:
@@ -299,3 +304,4 @@ class SherpaStreamingEngine:
             self.stream = None
             self._last_text = ""
             return final_text
+
