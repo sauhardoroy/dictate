@@ -48,6 +48,7 @@ DEFAULTS = {
     "show_interim_preview": True,
     "streaming_model": "nemo-fast-conformer-80ms",
     "context_awareness_enabled": True,
+    "mid_session_commands": True,
 }
 
 
@@ -152,6 +153,7 @@ _VALIDATORS = {
     "show_interim_preview": _is_bool,
     "streaming_model": lambda v: isinstance(v, str) and bool(v.strip()),
     "context_awareness_enabled": _is_bool,
+    "mid_session_commands": _is_bool,
 }
 
 

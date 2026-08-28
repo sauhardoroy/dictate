@@ -78,6 +78,58 @@ def get_action_command(text: str) -> Optional[str]:
     return ACTION_COMMANDS.get(cleaned)
 
 
+# ---------------------------------------------------------------------------
+# Mid-Session Dynamic Recording Commands ("continue" / "let's start again")
+# ---------------------------------------------------------------------------
+RESTART_COMMANDS = {
+    "let's start again",
+    "lets start again",
+    "start over",
+    "scratch that start again",
+    "scratch that, start again",
+}
+
+CONTINUE_COMMANDS = {
+    "continue",
+    "keep going",
+    "let me continue",
+}
+
+
+def detect_mid_session_command(segment_text: str) -> Optional[str]:
+    """Detect if an isolated speech segment matches a mid-session recording control command.
+
+    Returns:
+        'restart' for discard-and-restart commands
+        'continue' for silence timer extension commands
+        None if not an exact match on an isolated command phrase.
+
+    Enforces strict whole-segment isolation: only triggers if the segment contains
+    ONLY the command phrase. Embedded or mid-sentence occurrences return None.
+    """
+    if not segment_text:
+        return None
+    cleaned = segment_text.strip().lower()
+    cleaned = re.sub(r"^[^\w\s']+|[^\w\s']+$", "", cleaned).strip()
+
+    if cleaned in RESTART_COMMANDS:
+        return "restart"
+    if cleaned in CONTINUE_COMMANDS:
+        return "continue"
+    return None
+
+
+def strip_continue_command(text: str) -> str:
+    """Remove trailing or standalone 'continue' command phrases from transcribed text."""
+    if not text:
+        return ""
+    t = text.strip()
+    for cmd in CONTINUE_COMMANDS:
+        pattern = rf"(?i)(?:^|\s+){re.escape(cmd)}[.!?]?\s*$"
+        t = re.sub(pattern, "", t).strip()
+    return t
+
+
 # Spoken punctuation and structural substitutions
 PUNCTUATION_PHRASES = [
     # Paragraphs & lines

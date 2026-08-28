@@ -27,7 +27,12 @@ from injection.typer import execute_action, paste_text
 from log import get_logger
 from punctuation.post_processor import HALLUCINATION_BLOCKLIST, polish, llm_polish
 from punctuation.semantic_vad import get_adaptive_silence_duration
-from punctuation.voice_commands import ACTION_DISPLAY_NAMES, get_action_command
+from punctuation.voice_commands import (
+    ACTION_DISPLAY_NAMES,
+    get_action_command,
+    detect_mid_session_command,
+    strip_continue_command,
+)
 from ui.pill import Pill
 from ui.tray import TrayIcon
 
@@ -364,10 +369,40 @@ class DictateApp(QObject):
 
         threading.Thread(target=_worker, daemon=True).start()
 
+    def _handle_mid_session_command(self, text: str) -> bool:
+        """Evaluate and handle mid-session recording control commands ('restart' or 'continue').
+
+        Returns True if a command was matched and handled.
+        """
+        if not self.settings.get("mid_session_commands", True) or not text:
+            return False
+        cmd = detect_mid_session_command(text)
+        if cmd == "restart":
+            log.info("Mid-session 'restart' voice command matched: resetting recording session")
+            if self.recorder:
+                self.recorder.reset_buffer()
+            if self.streaming_engine.is_available():
+                self.streaming_engine.reset_stream()
+            self.pill.clear_preview()
+            self._set_state("recording", "Restarted — listening…")
+            self._play_sound("start")
+            return True
+        elif cmd == "continue":
+            log.info("Mid-session 'continue' voice command matched: extending silence timer")
+            if self.recorder:
+                self.recorder.reset_silence_timer()
+                base_sec = float(self.settings.get("vad_silence_seconds", 1.4))
+                self.recorder.update_silence_duration(base_sec + 2.0)
+            return True
+        return False
+
     @pyqtSlot(str)
     def _on_interim_text(self, text: str):
-        if self.state in ("recording", "preview") and self.settings.get("show_interim_preview", True):
-            self.pill.update_preview(text)
+        if self.state in ("recording", "preview"):
+            if self._handle_mid_session_command(text):
+                return
+            if self.settings.get("show_interim_preview", True):
+                self.pill.update_preview(text)
 
     def _on_silence_eval(self, audio_snapshot):
         """Asynchronously evaluates semantic thought completion on partial audio to dynamically adapt silence duration."""
@@ -375,6 +410,8 @@ class DictateApp(QObject):
         if self.streaming_engine.is_available():
             text = self.streaming_engine.get_last_text()
             if text and self.recorder and self.state in ("recording", "preview"):
+                if self._handle_mid_session_command(text):
+                    return
                 base_sec = float(self.settings.get("vad_silence_seconds", 1.4))
                 adaptive_sec = get_adaptive_silence_duration(text, base_silence_seconds=base_sec)
                 self.recorder.update_silence_duration(adaptive_sec)
@@ -394,6 +431,8 @@ class DictateApp(QObject):
                 res = self.engine.transcribe(audio_snapshot, fast=True)
                 if isinstance(res, dict):
                     text = res.get("text", "")
+                    if self._handle_mid_session_command(text):
+                        return
                     base_sec = float(self.settings.get("vad_silence_seconds", 1.4))
                     adaptive_sec = get_adaptive_silence_duration(text, base_silence_seconds=base_sec)
                     if self.recorder and self.state in ("recording", "preview"):
@@ -490,6 +529,17 @@ class DictateApp(QObject):
             log.info("nothing recognized (blocked hallucination)")
             self._idle("Nothing recognized")
             return
+
+        # Check for mid-session restart command or trailing continue command
+        if self.settings.get("mid_session_commands", True):
+            if detect_mid_session_command(text) == "restart":
+                log.info("Final transcript was an isolated restart command — discarding without injecting")
+                self._idle("Restarted")
+                return
+            text = strip_continue_command(text)
+            if not text:
+                self._idle("Nothing recognized")
+                return
 
         # Check for action voice command (e.g. "delete that", "select all", "press enter")
         if self.settings.get("voice_commands", True):

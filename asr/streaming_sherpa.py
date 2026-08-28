@@ -266,6 +266,19 @@ class SherpaStreamingEngine:
             else:
                 self.stream = None
 
+    def reset_stream(self):
+        """Reset the streaming session and clear decoded interim text for mid-session restart."""
+        with self._lock:
+            self._last_text = ""
+            if self._is_ready and self.recognizer:
+                try:
+                    self.stream = self.recognizer.create_stream()
+                except Exception as e:
+                    log.error("Failed to reset sherpa stream: %s", e)
+                    self.stream = None
+            else:
+                self.stream = None
+
     def accept_chunk(self, chunk: np.ndarray) -> Optional[str]:
         """Accept a 16kHz mono float32 chunk, decode, and return new text if updated."""
         with self._lock:

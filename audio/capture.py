@@ -342,6 +342,23 @@ class Recorder:
                 except Exception as e:
                     log.debug("VAD worker error: %s", e)
 
+    def reset_buffer(self):
+        """Discard all recorded audio accumulated so far and reset state for mid-session restart."""
+        with self._buf_lock:
+            self._write_pos = 0
+            if self._buffer is not None:
+                self._buffer.fill(0)
+        self.frames.clear()
+        self.silence_frames = 0
+        self.has_spoken = False
+        self._eval_triggered_for_pause = False
+        log.info("Recorder buffer and speech tracking reset")
+
+    def reset_silence_timer(self):
+        """Reset silence frame counter to extend active recording session."""
+        self.silence_frames = 0
+        self._eval_triggered_for_pause = False
+
     def snapshot(self) -> np.ndarray:
         """Return a snapshot copy of all recorded audio so far without stopping."""
         with self._buf_lock:
