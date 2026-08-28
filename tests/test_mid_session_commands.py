@@ -101,9 +101,17 @@ class TestStripContinueCommand:
         assert strip_continue_command("continue") == ""
         assert strip_continue_command("continue.") == ""
 
-    def test_preserve_mid_sentence_continue(self):
-        assert strip_continue_command("Let us continue our discussion") == "Let us continue our discussion"
-        assert strip_continue_command("Continue to provide updates") == "Continue to provide updates"
+    def test_strip_mid_sentence_continue_command(self):
+        raw = "I have three main points to discuss today, continue first is scalability, second is latency, and third is reliability."
+        assert strip_continue_command(raw) == "I have three main points to discuss today, first is scalability, second is latency, and third is reliability."
+
+        raw2 = "I need to think for a second keep going the answer is forty two"
+        assert strip_continue_command(raw2) == "I need to think for a second the answer is forty two"
+
+    def test_preserve_natural_speech_continue(self):
+        assert strip_continue_command("The team decided to continue the rollout") == "The team decided to continue the rollout"
+        assert strip_continue_command("We will continue tomorrow") == "We will continue tomorrow"
+        assert strip_continue_command("Can you continue the presentation") == "Can you continue the presentation"
 
 
 class TestRecorderResetBuffer:

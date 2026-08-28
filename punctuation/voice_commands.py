@@ -99,10 +99,10 @@ RESTART_PATTERNS = [
     r"(?i)(?:^|\b)\s*(?:let's\s+start\s+again|lets\s+start\s+again|start\s+over|scratch\s+that,?\s+start\s+again)[.!?]?\s*$",
 ]
 
-CONTINUE_PATTERNS = [
-    r"(?i)(?:^|\b)\s*(?:keep\s+going|let\s+me\s+continue|please\s+continue)[.!?]?\s*$",
-    r"(?i)(?:^|[.,!?;:\n])\s*continue[.!?]?\s*$",
-]
+SUBJECT_OR_MODAL_BEFORE = {
+    "to", "will", "can", "could", "would", "should", "shall", "must", "may", "might",
+    "you", "we", "they", "i", "he", "she", "it", "lets", "let's"
+}
 
 RESTART_SPLIT_PATTERN = re.compile(
     r"(?i)\b(?:let's\s+start\s+again|lets\s+start\s+again|start\s+over|scratch\s+that,?\s+start\s+again)\b[.!?]?",
@@ -133,7 +133,7 @@ def detect_mid_session_command(segment_text: str) -> Optional[str]:
 
     Matches either:
     1. Standalone isolated commands (e.g. "start over", "let's start again", "continue")
-    2. Trailing command phrases spoken at the end of a dictation stream (e.g. "... start over")
+    2. Trailing command phrases spoken at the end of a dictation stream (e.g. "... start over", "... continue")
 
     Rejects embedded/mid-sentence occurrences (e.g. "continue tomorrow", "start over next week").
 
@@ -153,23 +153,52 @@ def detect_mid_session_command(segment_text: str) -> Optional[str]:
         if re.search(pat, cleaned):
             return "restart"
 
-    # Check for continue patterns
-    for pat in CONTINUE_PATTERNS:
-        if re.search(pat, cleaned):
-            return "continue"
+    # Check for multi-word continuation commands
+    if re.search(r"(?i)(?:^|\b)\s*(?:keep\s+going|let\s+me\s+continue|please\s+continue)[.!?]?\s*$", cleaned):
+        return "continue"
+
+    # Check for trailing bare 'continue'
+    words = cleaned.split()
+    if words:
+        last_word_bare = re.sub(r"^[^\w']+|[^\w']+$", "", words[-1]).lower()
+        if last_word_bare == "continue":
+            prev_word = re.sub(r"^[^\w']+|[^\w']+$", "", words[-2]).lower() if len(words) > 1 else ""
+            if prev_word not in SUBJECT_OR_MODAL_BEFORE:
+                return "continue"
 
     return None
 
 
 def strip_continue_command(text: str) -> str:
-    """Remove trailing or standalone 'continue' command phrases from transcribed text."""
+    """Remove mid-session and trailing continuation command phrases from transcribed text."""
     if not text:
         return ""
-    t = text.strip()
-    for cmd in CONTINUE_COMMANDS:
-        pattern = rf"(?i)(?:^|\s+){re.escape(cmd)}[.!?]?\s*$"
-        t = re.sub(pattern, "", t).strip()
-    return t
+
+    # 1. Multi-word continuation commands
+    t = re.sub(r"(?i)\b(?:keep\s+going|let\s+me\s+continue|please\s+continue)\b[,.]?\s*", "", text)
+
+    # 2. Token-level analysis for bare 'continue'
+    words = t.split()
+    cleaned_words = []
+    i = 0
+    while i < len(words):
+        w = words[i]
+        w_bare = re.sub(r"^[^\w']+|[^\w']+$", "", w).lower()
+        if w_bare == "continue":
+            prev_word = re.sub(r"^[^\w']+|[^\w']+$", "", words[i - 1]).lower() if i > 0 else ""
+            if prev_word in SUBJECT_OR_MODAL_BEFORE:
+                cleaned_words.append(w)
+            else:
+                # Strip continuation voice command
+                pass
+        else:
+            cleaned_words.append(w)
+        i += 1
+
+    res = " ".join(cleaned_words).strip()
+    res = re.sub(r"\s+([,.!?;:])", r"\1", res)
+    res = re.sub(r",\s*,", ",", res)
+    return res
 
 
 # Spoken punctuation and structural substitutions
