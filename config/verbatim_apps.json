@@ -1,0 +1,27 @@
+{
+  "executables": [
+    "winword.exe",
+    "wordpad.exe",
+    "notepad.exe",
+    "soffice.bin",
+    "writer.exe",
+    "acrobat.exe",
+    "acrord32.exe",
+    "onenote.exe",
+    "obsidian.exe",
+    "notion.exe",
+    "code.exe",
+    "cursor.exe",
+    "windsurf.exe",
+    "pycharm64.exe",
+    "idea64.exe",
+    "sublime_text.exe",
+    "notepad++.exe"
+  ],
+  "title_patterns": [
+    "(?i)google docs",
+    "(?i)microsoft word",
+    "(?i)wordpad",
+    "(?i)notepad"
+  ]
+}

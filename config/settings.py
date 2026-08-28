@@ -51,6 +51,7 @@ DEFAULTS = {
     "mid_session_commands": True,
     "voice_app_launch_enabled": True,
     "app_launch_registry_file": "app_launch_registry.json",
+    "polish_mode": "auto",
 }
 
 
@@ -158,6 +159,7 @@ _VALIDATORS = {
     "mid_session_commands": _is_bool,
     "voice_app_launch_enabled": _is_bool,
     "app_launch_registry_file": lambda v: isinstance(v, str) and bool(v.strip()),
+    "polish_mode": lambda v: v in {"auto", "verbatim", "per_app"},
 }
 
 

@@ -246,7 +246,13 @@ class DictateApp(QObject):
 
             else:
                 # Synchronous path: Post-process (potentially slow if using AI polish)
-                text = polish(raw_text, settings=self.settings.data)
+                text = polish(
+                    raw_text,
+                    settings=self.settings.data,
+                    target_app_name=self.target_app_name,
+                    target_window_title=self.target_window_title,
+                    target_category=getattr(self, "target_category", ""),
+                )
                 result["text"] = text
                 log.info("transcribed %.1fs -> %d chars", dur, len(text))
                 self.sig.engine_result.emit(result)

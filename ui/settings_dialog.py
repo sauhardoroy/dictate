@@ -387,6 +387,17 @@ class SettingsDialog(QDialog):
         c2.addWidget(self.voice_commands_cb)
         c2.addWidget(make_hairline(t))
 
+        self.polish_mode_combo = QComboBox()
+        self.polish_mode_combo.addItem("Auto (Standard AI Polish)", "auto")
+        self.polish_mode_combo.addItem("Verbatim Safe-Default", "verbatim")
+        self.polish_mode_combo.addItem("Per-App Intelligent Routing", "per_app")
+        cur_polish_mode = data.get("polish_mode", "auto")
+        idx = self.polish_mode_combo.findData(cur_polish_mode)
+        if idx >= 0:
+            self.polish_mode_combo.setCurrentIndex(idx)
+        c2.addLayout(_row("Text Polish Mode", "Rewrite safety per application", self.polish_mode_combo))
+        c2.addWidget(make_hairline(t))
+
         self.vad_silence = QDoubleSpinBox()
         self.vad_silence.setRange(0.3, 5.0)
         self.vad_silence.setSingleStep(0.1)
@@ -663,6 +674,7 @@ class SettingsDialog(QDialog):
             "auto_stop": bool(self.stop_mode.currentData()),
             "vad_silence_seconds": round(self.vad_silence.value(), 1),
             "voice_commands": self.voice_commands_cb.isChecked(),
+            "polish_mode": self.polish_mode_combo.currentData() or "auto",
             "show_interim_preview": self.preview_cb.isChecked(),
             "streaming_model": self.streaming_model.currentData() or self.streaming_model.currentText(),
             "ai_polish": self.ai_enable_cb.isChecked(),

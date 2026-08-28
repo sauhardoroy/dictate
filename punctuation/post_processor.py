@@ -141,8 +141,73 @@ def apply_hotwords_casing(text: str, hotwords_file: str = "hotwords.txt") -> str
     return text
 
 
-def polish(text: str, settings: dict = None) -> str:
-    """Clean up transcribed text. If AI polish is enabled, use NVIDIA LLM, otherwise use light regex cleanup."""
+def verbatim_clean(text: str, hotwords_file: str = "hotwords.txt") -> str:
+    """Perform deterministic local cleanup: filler word removal, repetition removal,
+    casing, and punctuation. 100% local, zero network calls.
+    """
+    if not text:
+        return ""
+
+    t = text.strip()
+
+    # 1. Remove standalone hesitation / filler sounds: um, uh, ah, erm, hmm, er
+    t = re.sub(r"(?i)\b(?:um|uh|erm|ah|hmm|er)\b[,.]?", "", t)
+
+    # 2. Remove multi-word repeated phrases / false starts (4-word, 3-word, 2-word)
+    for n in (4, 3, 2):
+        pattern = rf"\b((?:\w+\s+){{{n-1}}}\w+)(?:\s+\1\b)+"
+        t = re.sub(pattern, r"\1", t, flags=re.IGNORECASE)
+
+    # 3. Remove single word repetitions (e.g. "the the" -> "the", "I I" -> "I")
+    t = re.sub(r"\b(\w+)(?:\s+\1\b)+", r"\1", t, flags=re.IGNORECASE)
+
+    # 4. Clean up spaces created by removals
+    t = re.sub(r"\s+", " ", t).strip()
+
+    # 5. Apply standard light polish (hotwords casing, spacing around punctuation, capital first letter, terminal period)
+    return _light_polish(t, hotwords_file=hotwords_file)
+
+
+def _is_verbatim_app(app_name: str = "", window_title: str = "", category: str = "", config_path: Optional[str] = None) -> bool:
+    """Check if the active application or window title should use verbatim mode."""
+    # Coarse category check
+    if category in ("document_editor", "code_agent"):
+        return True
+
+    # Check against verbatim_apps.json
+    if not config_path:
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        config_path = os.path.join(project_root, "config", "verbatim_apps.json")
+
+    if os.path.isfile(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                exes = [e.lower() for e in data.get("executables", [])]
+                if app_name and app_name.lower() in exes:
+                    return True
+                patterns = data.get("title_patterns", [])
+                if window_title:
+                    for pat in patterns:
+                        if re.search(pat, window_title):
+                            return True
+            elif isinstance(data, list):
+                lowered = [x.lower() for x in data if isinstance(x, str)]
+                if app_name and app_name.lower() in lowered:
+                    return True
+                if window_title:
+                    for pat in lowered:
+                        if pat in window_title.lower():
+                            return True
+        except Exception:
+            pass
+
+    return False
+
+
+def polish(text: str, settings: dict = None, target_app_name: str = "", target_window_title: str = "", target_category: str = "") -> str:
+    """Clean up transcribed text according to polish_mode ('auto', 'verbatim', 'per_app')."""
     if not text:
         return ""
         
@@ -155,7 +220,19 @@ def polish(text: str, settings: dict = None) -> str:
         t = apply_voice_formatting(t)
 
     hotwords_file = settings.get("hotwords_file", "hotwords.txt") if settings else "hotwords.txt"
+    polish_mode = settings.get("polish_mode", "auto") if settings else "auto"
 
+    # 1. Verbatim mode: Always clean verbatim, never call cloud LLM
+    if polish_mode == "verbatim":
+        return verbatim_clean(t, hotwords_file=hotwords_file)
+
+    # 2. Per-app mode: Check if active context is a document editor, code agent, or listed verbatim app
+    if polish_mode == "per_app":
+        is_verbatim = _is_verbatim_app(target_app_name, target_window_title, target_category)
+        if is_verbatim:
+            return verbatim_clean(t, hotwords_file=hotwords_file)
+
+    # 3. Auto mode (default): if ai_polish enabled, use LLM polish; else light polish
     if settings and settings.get("ai_polish", False):
         t = _llm_polish(t, settings, hotwords_file=hotwords_file)
     else:
