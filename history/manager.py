@@ -71,7 +71,7 @@ class HistoryManager:
         self.max_entries = max_entries
         self.enabled = enabled
         self._entries: list[TranscriptRecord] = []
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self.load()
 
     def load(self):
@@ -96,15 +96,22 @@ class HistoryManager:
         if not self.enabled:
             return
         with self._lock:
+            temp_path = None
             try:
                 os.makedirs(os.path.dirname(os.path.abspath(self.file_path)), exist_ok=True)
                 data = [e.to_dict() for e in self._entries[:self.max_entries]]
-                temp_path = f"{self.file_path}.tmp"
+                unique_suffix = f"{os.getpid()}_{threading.get_ident()}_{uuid.uuid4().hex[:6]}"
+                temp_path = f"{self.file_path}.{unique_suffix}.tmp"
                 with open(temp_path, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2, ensure_ascii=False)
                 os.replace(temp_path, self.file_path)
             except Exception as exc:
                 log.warning("failed to save history to %s: %s", self.file_path, exc)
+                if temp_path and os.path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                    except Exception:
+                        pass
 
     def add_entry(
         self,
@@ -142,8 +149,8 @@ class HistoryManager:
             self._entries.insert(0, record)
             if len(self._entries) > self.max_entries:
                 self._entries = self._entries[:self.max_entries]
+            self.save()
 
-        self.save()
         log.debug("recorded transcript history (%d chars, %d words)", record.char_count, record.word_count)
         return record
 
@@ -163,15 +170,15 @@ class HistoryManager:
             initial_count = len(self._entries)
             self._entries = [e for e in self._entries if e.id != entry_id]
             removed = len(self._entries) < initial_count
-        if removed:
-            self.save()
-        return removed
+            if removed:
+                self.save()
+            return removed
 
     def clear(self):
         """Clear all entries from history."""
         with self._lock:
             self._entries = []
-        self.save()
+            self.save()
         log.info("cleared transcript history")
 
     def search(self, query: str) -> list[TranscriptRecord]:

@@ -111,11 +111,13 @@ class SherpaStreamingEngine:
             bi_dir = os.path.join(models_base, "sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20")
             if os.path.exists(bi_dir):
                 onnx_files = [f for f in os.listdir(bi_dir) if f.endswith(".onnx")]
-                enc = [f for f in onnx_files if "encoder" in f][0]
-                dec = [f for f in onnx_files if "decoder" in f][0]
-                joi = [f for f in onnx_files if "joiner" in f][0]
+                enc_candidates = [f for f in onnx_files if "encoder" in f]
+                dec_candidates = [f for f in onnx_files if "decoder" in f]
+                joi_candidates = [f for f in onnx_files if "joiner" in f]
                 tokens = os.path.join(bi_dir, "tokens.txt")
-                return self._init_recognizer(tokens, os.path.join(bi_dir, enc), os.path.join(bi_dir, dec), os.path.join(bi_dir, joi))
+                if enc_candidates and dec_candidates and joi_candidates and os.path.exists(tokens):
+                    return self._init_recognizer(tokens, os.path.join(bi_dir, enc_candidates[0]), os.path.join(bi_dir, dec_candidates[0]), os.path.join(bi_dir, joi_candidates[0]))
+                log.warning("Bilingual Zipformer folder %s is missing required onnx or tokens files", bi_dir)
 
         # 3. 20M Lightweight Zipformer
         model_dir = os.path.join(models_base, MODEL_DIR_NAME)
@@ -139,7 +141,13 @@ class SherpaStreamingEngine:
             os.makedirs(dest_dir, exist_ok=True)
             archive = os.path.join(dest_dir, "streaming_model.tar.bz2")
             log.info("Downloading Sherpa-ONNX streaming model (~25 MB)...")
-            urllib.request.urlretrieve(MODEL_URL, archive)
+            req = urllib.request.Request(MODEL_URL, headers={"User-Agent": "Dictate/2.0"})
+            with urllib.request.urlopen(req, timeout=30.0) as response, open(archive, "wb") as out_file:
+                while True:
+                    chunk = response.read(65536)
+                    if not chunk:
+                        break
+                    out_file.write(chunk)
             log.info("Extracting Sherpa-ONNX streaming model...")
             with tarfile.open(archive, "r:bz2") as tar:
                 tar.extractall(dest_dir)
